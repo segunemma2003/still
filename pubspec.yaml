@@ -1,0 +1,142 @@
+# Nylo - Micro-framework for Flutter.
+#
+# Website: https://nylo.dev
+# Official repository: https://github.com/nylo-core/nylo
+# Author: Anthony Gordon <https://github.com/agordn52>
+
+name: flutter_app
+description: A new Nylo Flutter application.
+
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.4.0 <4.0.0'
+  flutter: ">=3.24.0 <4.0.0"
+dependencies:
+  url_launcher: ^6.2.6
+  google_fonts: ^6.2.1
+  analyzer: ^6.7.0
+  intl: ^0.20.2
+  nylo_framework: ^6.8.7
+  pretty_dio_logger: ^1.4.0
+  cupertino_icons: ^1.0.8
+  path_provider: ^2.1.4
+  flutter_local_notifications: ^19.1.0
+  font_awesome_flutter: ^10.8.0
+  scaffold_ui: ^1.2.7
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  country_code_picker: ^3.3.0
+  image_picker: ^1.1.2
+  file_picker: ^10.2.0
+  flutter_chat_types: ^3.6.2
+  flutter_chat_ui: ^2.5.2
+  flutter_svg: ^2.2.0
+
+dev_dependencies:
+  rename: ^3.1.0
+  flutter_launcher_icons: ^0.14.3
+  # The following line 'flutter_lints' activates a set of recommended lints for Flutter apps,
+  # packages, and plugins designed to encourage good coding practices.
+#  flutter_lints: ^5.0.0
+  flutter_test:
+    sdk: flutter
+
+# APP ICON - public/app_icon/icon.png
+# Build icons: "dart run flutter_launcher_icons"
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "public/app_icon/icon.png"
+  remove_alpha_ios: true
+
+# RENAME YOUR PROJECT
+# flutter pub run rename setAppName --targets ios,android --value "YourAppName"
+
+flutter:
+
+  fonts:
+    # Plus Jakarta Sans Font Family
+    - family: PlusJakartaSans
+      fonts:
+        - asset: public/fonts/PlusJakartaSans-ExtraLight.ttf
+          weight: 200
+        - asset: public/fonts/PlusJakartaSans-ExtraLightItalic.ttf
+          weight: 200
+          style: italic
+        - asset: public/fonts/PlusJakartaSans-Light.ttf
+          weight: 300
+        - asset: public/fonts/PlusJakartaSans-LightItalic.ttf
+          weight: 300
+          style: italic
+        - asset: public/fonts/PlusJakartaSans-Regular.ttf
+          weight: 400
+        - asset: public/fonts/PlusJakartaSans-Italic.ttf
+          weight: 400
+          style: italic
+        - asset: public/fonts/PlusJakartaSans-Medium.ttf
+          weight: 500
+        - asset: public/fonts/PlusJakartaSans-MediumItalic.ttf
+          weight: 500
+          style: italic
+        - asset: public/fonts/PlusJakartaSans-SemiBold.ttf
+          weight: 600
+        - asset: public/fonts/PlusJakartaSans-SemiBoldItalic.ttf
+          weight: 600
+          style: italic
+        - asset: public/fonts/PlusJakartaSans-Bold.ttf
+          weight: 700
+        - asset: public/fonts/PlusJakartaSans-BoldItalic.ttf
+          weight: 700
+          style: italic
+        - asset: public/fonts/PlusJakartaSans-ExtraBold.ttf
+          weight: 800
+        - asset: public/fonts/PlusJakartaSans-ExtraBoldItalic.ttf
+          weight: 800
+          style: italic
+
+    # Lato Font Family
+    - family: Lato
+      fonts:
+        - asset: public/fonts/Lato-Thin.ttf
+          weight: 100
+        - asset: public/fonts/Lato-ThinItalic.ttf
+          weight: 100
+          style: italic
+        - asset: public/fonts/Lato-Light.ttf
+          weight: 300
+        - asset: public/fonts/Lato-LightItalic.ttf
+          weight: 300
+          style: italic
+        - asset: public/fonts/Lato-Regular.ttf
+          weight: 400
+        - asset: public/fonts/Lato-Italic.ttf
+          weight: 400
+          style: italic
+        - asset: public/fonts/Lato-Bold.ttf
+          weight: 700
+        - asset: public/fonts/Lato-BoldItalic.ttf
+          weight: 700
+          style: italic
+        - asset: public/fonts/Lato-Black.ttf
+          weight: 900
+        - asset: public/fonts/Lato-BlackItalic.ttf
+          weight: 900
+          style: italic
+
+  # The following line ensures that the Material Icons font is
+  # included with your application, so that you can use the icons in
+  # the material Icons class.
+  uses-material-design: true
+
+  # To add assets to your application, add an assets section, like this:
+  assets:
+    - public/fonts/
+    - public/images/
+    - public/app_icon/
+    - lang/
+    - .env
