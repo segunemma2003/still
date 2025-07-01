@@ -28,12 +28,12 @@ ThemeData lightTheme(ColorStyles color) {
       backgroundColor: color.appBarBackground,
       titleTextStyle: lightTheme.titleLarge!.copyWith(
         color: color.appBarPrimaryContent,
-        fontFamily: 'PlusJakartaSans',
+        fontFamily: '',
         fontWeight: FontWeight.w600, // SemiBold for app bar
       ),
       iconTheme: IconThemeData(color: color.appBarPrimaryContent),
       elevation: 1.0,
-      systemOverlayStyle: SystemUiOverlayStyle.dark,
+      // systemOverlayStyle: SystemUiOverlayStyle.light,
     ),
     buttonTheme: ButtonThemeData(
       buttonColor: color.buttonContent,
@@ -43,7 +43,7 @@ ThemeData lightTheme(ColorStyles color) {
       style: TextButton.styleFrom(
         foregroundColor: color.content,
         textStyle: TextStyle(
-          fontFamily: 'PlusJakartaSans',
+          fontFamily: '',
           fontWeight: FontWeight.w500, // Medium for text buttons
         ),
       ),
@@ -53,7 +53,7 @@ ThemeData lightTheme(ColorStyles color) {
         foregroundColor: color.buttonContent,
         backgroundColor: color.buttonBackground,
         textStyle: TextStyle(
-          fontFamily: 'PlusJakartaSans',
+          fontFamily: '',
           fontWeight: FontWeight.w600, // SemiBold for elevated buttons
         ),
       ),
@@ -65,12 +65,12 @@ ThemeData lightTheme(ColorStyles color) {
       selectedIconTheme: IconThemeData(color: color.bottomTabBarIconSelected),
       unselectedLabelStyle: TextStyle(
         color: color.bottomTabBarLabelUnselected,
-        fontFamily: 'PlusJakartaSans',
+        fontFamily: '',
         fontWeight: FontWeight.w400, // Regular for unselected
       ),
       selectedLabelStyle: TextStyle(
         color: color.bottomTabBarLabelSelected,
-        fontFamily: 'PlusJakartaSans',
+        fontFamily: '',
         fontWeight: FontWeight.w500, // Medium for selected
       ),
       selectedItemColor: color.bottomTabBarLabelSelected,
@@ -90,12 +90,12 @@ ThemeData lightTheme(ColorStyles color) {
 TextTheme _textTheme(ColorStyles colors) {
   TextTheme textTheme = const TextTheme().apply(
     displayColor: colors.content,
-    fontFamily: 'PlusJakartaSans', // Apply Jakarta Sans to all text
+    fontFamily: '', // Apply Jakarta Sans to all text
   );
   return textTheme.copyWith(
       labelLarge: TextStyle(
     color: colors.content.withAlpha((255.0 * 0.8).round()),
-    fontFamily: 'PlusJakartaSans',
+    fontFamily: '',
     fontWeight: FontWeight.w500, // Medium for labels
   ));
 }

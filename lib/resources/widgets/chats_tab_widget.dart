@@ -1,7 +1,10 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_app/app/models/contact_info.dart';
 import 'package:flutter_app/resources/widgets/alphabet_scroll_view_widget.dart';
+import 'package:flutter_svg/svg.dart';
 import 'package:nylo_framework/nylo_framework.dart';
 
 import '../pages/chat_screen_page.dart';
@@ -95,7 +98,7 @@ class _ChatsTabState extends NyState<ChatsTab> {
       builder: (context) => Container(
         height: MediaQuery.of(context).size.height * 0.8,
         decoration: const BoxDecoration(
-          color: Color(0xFF1C212C),
+          color: Color(0xFF1B1C1D),
           borderRadius: BorderRadius.only(
             topLeft: Radius.circular(20),
             topRight: Radius.circular(20),
@@ -106,17 +109,17 @@ class _ChatsTabState extends NyState<ChatsTab> {
             // Handle bar
             Container(
               margin: const EdgeInsets.only(top: 8),
-              width: 40,
+              width: 84,
               height: 4,
               decoration: BoxDecoration(
-                color: Colors.grey.shade600,
+                color: Color(0xFFC4C6C8),
                 borderRadius: BorderRadius.circular(2),
               ),
-            ),
+            ).onTap(() => Navigator.pop(context)),
 
             // Header
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(8),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -124,16 +127,18 @@ class _ChatsTabState extends NyState<ChatsTab> {
                     onPressed: () => Navigator.pop(context),
                     child: const Text(
                       'Cancel',
-                      style: TextStyle(color: Color(0xFFE8E7EA), fontSize: 12),
+                      style: TextStyle(
+                          color: Color(0xFFFFFFFF),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w400),
                     ),
                   ),
                   const Text(
                     'New Chat',
                     style: TextStyle(
-                      color: Color(0xFFE8E7EA),
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
+                        color: Color(0xFFFFFFFF),
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(width: 60), // Balance the Cancel button
                 ],
@@ -142,46 +147,57 @@ class _ChatsTabState extends NyState<ChatsTab> {
 
             // Search bar
             Container(
-              height: 14,
+              height: 50, // Increased height to accommodate the text properly
               margin: const EdgeInsets.symmetric(horizontal: 16),
               decoration: BoxDecoration(
-                color: const Color(0xFF0F131B),
-                borderRadius: BorderRadius.circular(8),
+                color: Colors.transparent, // Make background transparent
+                border: Border(
+                  bottom: BorderSide(
+                    color: Colors.grey.shade600, // Bottom border color
+                    width: 1.0,
+                  ),
+                ),
               ),
               child: TextField(
                 style: const TextStyle(color: Color(0xFFE8E7EA)),
                 decoration: InputDecoration(
                   hintText: 'Search contact or username',
                   hintStyle:
-                      TextStyle(color: Colors.grey.shade500, fontSize: 14),
-                  prefixIcon: Container(
-                    padding: const EdgeInsets.all(12),
-                    child: Image.asset(
-                      'search.png', // Using image instead of icon
-                      width: 16,
-                      height: 16,
-                      color: Colors.grey.shade500,
-                    ).localAsset(),
+                      TextStyle(color: Colors.grey.shade500, fontSize: 18),
+                  prefixIcon: Icon(
+                    Icons.search,
+                    color: Colors.grey.shade500,
+                    size: 20,
                   ),
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.all(16),
+                  border: InputBorder.none, // Remove all default borders
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                 ),
               ),
             ),
 
-            const SizedBox(height: 16),
+            const SizedBox(height: 4),
 
             // New Group and New Contact options
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 2),
               child: Column(
                 children: [
                   _buildOptionItem(
                     iconImage: 'group.png', // Using image instead of icon
                     title: 'New Group',
-                    color: const Color(0xFF3498DB),
+                    color: const Color(0xFF57A1FF),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 4),
+                  Container(
+                    // Align with message content
+                    height: 0.5,
+
+                    color: Color(0xFF2B2A30), // Very faint line
+                  ),
+                  const SizedBox(height: 4),
                   _buildOptionItem(
                     iconImage: 'person-add.png', // Using image instead of icon
                     title: 'New Contact',
@@ -200,8 +216,8 @@ class _ChatsTabState extends NyState<ChatsTab> {
               child: Text(
                 'Recently Contacted',
                 style: TextStyle(
-                  color: Colors.grey.shade500,
-                  fontSize: 14,
+                  color: Color(0xFF82808F),
+                  fontSize: 16,
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -251,7 +267,7 @@ class _ChatsTabState extends NyState<ChatsTab> {
         }
       },
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
         decoration: BoxDecoration(
           color: Colors.transparent,
           borderRadius: BorderRadius.circular(12),
@@ -268,9 +284,9 @@ class _ChatsTabState extends NyState<ChatsTab> {
               child: Center(
                 child: Image.asset(
                   iconImage,
-                  width: 13,
-                  height: 13,
-                  color: Color(0xFFE8E7EA),
+                  width: 16,
+                  height: 16,
+                  color: Color(0xFF57A1FF),
                 ).localAsset(),
               ),
             ),
@@ -278,9 +294,9 @@ class _ChatsTabState extends NyState<ChatsTab> {
             Text(
               title,
               style: const TextStyle(
-                color: Color(0xFFE8E7EA),
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
+                color: Color(0xFF57A1FF),
+                fontSize: 16,
+                fontWeight: FontWeight.w300,
               ),
             ),
           ],
@@ -312,15 +328,15 @@ class _ChatsTabState extends NyState<ChatsTab> {
             });
           },
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding: EdgeInsets.fromLTRB(16, 18, 16, 8),
             child: Row(
               children: [
                 // Avatar with online indicator
                 Stack(
                   children: [
                     Container(
-                      width: 47,
-                      height: 47,
+                      width: 54,
+                      height: 54,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: Colors.grey.shade700, // Placeholder background
@@ -329,8 +345,8 @@ class _ChatsTabState extends NyState<ChatsTab> {
                           ? ClipOval(
                               child: Image.asset(
                                 imagePath,
-                                width: 47,
-                                height: 47,
+                                width: 54,
+                                height: 54,
                                 fit: BoxFit.cover,
                               ).localAsset(),
                             )
@@ -373,10 +389,10 @@ class _ChatsTabState extends NyState<ChatsTab> {
                             child: Text(
                               name,
                               style: const TextStyle(
-                                color: Color(0xFFE8E7EA),
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                              ),
+                                  color: Color(0xFFE8E7EA),
+                                  letterSpacing: 0.5,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700),
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
@@ -394,9 +410,9 @@ class _ChatsTabState extends NyState<ChatsTab> {
                       Text(
                         message,
                         style: TextStyle(
-                          color: Colors.grey.shade400,
-                          fontSize: 8,
-                        ),
+                            color: Colors.grey.shade400,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -412,18 +428,30 @@ class _ChatsTabState extends NyState<ChatsTab> {
                     Text(
                       time,
                       style: TextStyle(
-                        color: Colors.grey.shade500,
+                        color: Color(0xff9D9C9C),
                         fontSize: 12,
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 18),
                     if (hasUnread)
                       Container(
-                        width: 8,
-                        height: 8,
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF3498DB),
+                        width: 20,
+                        height: 20,
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                              colors: [Color(0xFF57A1FF), Color(0xFF3B69C6)]),
                           shape: BoxShape.circle,
+                        ),
+                        child: Center(
+                          child: Text(
+                            '12', // Your text here
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize:
+                                  12, // Small font size to fit in 12x12 container
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
                         ),
                       ),
                   ],
@@ -446,13 +474,13 @@ class _ChatsTabState extends NyState<ChatsTab> {
 
   @override
   Widget view(BuildContext context) {
-    // List of chat items
+    // List of chat items - "stillur" is now at the top
     final chatItems = [
       {
         'name': "stillur",
         'message':
             "Hey there Miriam, here are some new updates on the stillur app, to further enhance your private experience.",
-        'time': "8:24",
+        'time': "8:21",
         'isVerified': true,
         'hasUnread': true,
         'imagePath': "stillur.png",
@@ -461,7 +489,7 @@ class _ChatsTabState extends NyState<ChatsTab> {
         'name': "Layla B",
         'message':
             "The reviews are very good! I guess we shall see Layla, I have a good feeling about it.",
-        'time': "8:24",
+        'time': "8:21",
         'hasUnread': true,
         'imagePath': "image1.png",
       },
@@ -469,14 +497,14 @@ class _ChatsTabState extends NyState<ChatsTab> {
         'name': "Ahmad",
         'message':
             "The reviews are very good! I guess we shall see Layla, I have a good feeling about it.",
-        'time': "8:24",
+        'time': "8:21",
         'isOnline': true,
         'imagePath': "image2.png",
       },
       {
         'name': "Sheilla",
         'message': "The reviews are very good.",
-        'time': "8:24",
+        'time': "8:21",
         'hasUnread': true,
         'imagePath': "image3.png",
       },
@@ -484,21 +512,21 @@ class _ChatsTabState extends NyState<ChatsTab> {
         'name': "Gadia",
         'message':
             "The reviews are very good! I guess we shall see Layla, I have a good feeling about it.",
-        'time': "8:24",
+        'time': "8:21",
         'imagePath': "image4.png",
       },
       {
         'name': "Our Loving Pets",
         'message':
             "You: The reviews are very good! I guess we shall see Layla, I have a good feeling about it.",
-        'time': "8:24",
+        'time': "8:21",
         'imagePath': "image5.png",
       },
       {
         'name': "Rodriga",
         'message':
             "The reviews are very good! I guess we shall see Layla, I have a good feeling about it.",
-        'time': "8:24",
+        'time': "8:21",
         'hasUnread': true,
         'imagePath': "image10.png",
       },
@@ -506,7 +534,7 @@ class _ChatsTabState extends NyState<ChatsTab> {
         'name': "Eleanor",
         'message':
             "The reviews are very good! I guess we shall see Layla, I have a good feeling about it.",
-        'time': "8:24",
+        'time': "8:21",
         'hasUnread': true,
         'imagePath': "image7.png",
       },
@@ -514,15 +542,15 @@ class _ChatsTabState extends NyState<ChatsTab> {
         'name': "Layla B",
         'message':
             "The reviews are very good! I guess we shall see Layla, I have a good feeling about it.",
-        'time': "8:24",
+        'time': "8:21",
         'hasUnread': true,
         'imagePath': "image8.png",
       },
       {
         'name': "Fast Cars and Tracks",
         'message':
-            "Simple: The reviews are very good! I guess we shall see Layla, I have a good feeling about it.",
-        'time': "8:24",
+            "Samad: The reviews are very good! I guess we shall see Layla, I have a good feeling about it.",
+        'time': "8:21",
         'hasUnread': true,
         'imagePath': "image9.png",
       },
@@ -530,14 +558,14 @@ class _ChatsTabState extends NyState<ChatsTab> {
         'name': "Our Loving Pets",
         'message':
             "You: The reviews are very good! I guess we shall see Layla, I have a good feeling about it.",
-        'time': "8:24",
+        'time': "8:21",
         'imagePath': "image11.png",
       },
       {
         'name': "Rodriga",
         'message':
             "The reviews are very good! I guess we shall see Layla, I have a good feeling about it.",
-        'time': "8:24",
+        'time': "8:21",
         'hasUnread': true,
         'imagePath': "image3.png",
       },
@@ -545,7 +573,7 @@ class _ChatsTabState extends NyState<ChatsTab> {
         'name': "Eleanor",
         'message':
             "The reviews are very good! I guess we shall see Layla, I have a good feeling about it.",
-        'time': "8:24",
+        'time': "8:21",
         'hasUnread': true,
         'imagePath': "image1.png",
       },
@@ -553,61 +581,256 @@ class _ChatsTabState extends NyState<ChatsTab> {
 
     return Scaffold(
       backgroundColor: const Color(0xFF0F131B),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF1C212C),
-        elevation: 3,
-        centerTitle: true,
-        leading: IconButton(
-          icon: Container(
-            width: 16,
-            height: 16,
-            child: Image.asset(
-              'add-a-photo.png', // Using image instead of icon
-              width: 16,
-              height: 16,
-              color: Color(0xFFE8E7EA), // Tint the image
-            ).localAsset(),
+      appBar: PreferredSize(
+        preferredSize:
+            const Size.fromHeight(140), // Increased height for search bar
+        child: ClipRRect(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+            child: AppBar(
+              backgroundColor: const Color(0xFF1C212C),
+              elevation: 3,
+              automaticallyImplyLeading: false, // Remove default back button
+              flexibleSpace: SafeArea(
+                child: Column(
+                  children: [
+                    // Top row with logo, title, and action buttons
+                    Container(
+                      height: 60,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Column(
+                        children: [
+                          SizedBox(
+                            height: 10,
+                          ),
+                          // Top row - Logo centered
+                          // Container(
+                          //   height: 10,
+                          //   alignment: Alignment.topLeft,
+                          //   child: Container(
+                          //     width: 50,
+                          //     height: 13,
+                          //     child: Image.asset(
+                          //       'stillurlogo.png',
+                          //       width: 50,
+                          //       height: 13,
+                          //     ).localAsset(),
+                          //   ),
+                          // ),
+
+                          // Bottom row - Edit, Chats, Icons
+                          Container(
+                            height: 30,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                // Left - Edit
+                                Text(
+                                  'Edit',
+                                  style: TextStyle(
+                                    color: Color(0xFF3498DB),
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w400,
+                                  ),
+                                ),
+
+                                // Center - Chats
+                                Text(
+                                  'Chats',
+                                  style: TextStyle(
+                                    color: Color(0xFFE8E7EA),
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+
+                                // Right - Action buttons (closer together)
+                                Row(
+                                  children: [
+                                    Container(
+                                      width: 18,
+                                      height: 18,
+                                      decoration: BoxDecoration(
+                                        color: Colors.transparent,
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: IconButton(
+                                        icon: Container(
+                                          width: 20,
+                                          height: 20,
+                                          child: Image.asset(
+                                            'add-a-photo.png',
+                                            width: 20,
+                                            height: 20,
+                                            color: Color(0xFFE8E7EA),
+                                          ).localAsset(),
+                                        ),
+                                        onPressed: () {},
+                                        padding: EdgeInsets.zero,
+                                      ),
+                                    ),
+                                    const SizedBox(
+                                        width: 8), // Much closer spacing
+
+                                    Container(
+                                      width: 20,
+                                      height: 20,
+                                      decoration: BoxDecoration(
+                                        color: Color.lerp(Color(0xffD0DBFF),
+                                                Color(0xff5B67D1), 0.5)!
+                                            .withValues(alpha: 0.5),
+                                        borderRadius: BorderRadius.circular(
+                                            3), // 3px border radius
+                                      ),
+                                      child: Center(
+                                        // Center the icon within the container
+                                        child: SvgPicture.asset(
+                                          'public/images/plus_icon.svg',
+                                          width: 11,
+                                          height: 11,
+                                          colorFilter: ColorFilter.mode(
+                                            Color(0xffffffff), // White color
+                                            BlendMode.srcIn,
+                                          ),
+                                        ),
+                                      ),
+                                    ).onTap(() {
+                                      _showNewChatBottomSheet(context);
+                                    })
+                                    // Container(
+                                    //   width: 20,
+                                    //   height: 20,
+                                    //   decoration: BoxDecoration(
+                                    //     color: Color.lerp(Color(0xffD0DBFF),
+                                    //             Color(0xff5B67D1), 0.5)!
+                                    //         .withValues(
+                                    //             alpha:
+                                    //                 0.5), // Your mixed blue background
+                                    //   ),
+                                    //   child: Image.asset(
+                                    //     'plus_icon.png',
+                                    //     width: 20,
+                                    //     height: 20,
+                                    //     color: Color(0xffffffff),
+                                    //     // Remove the color property to stop tinting the icon
+                                    //   ).localAsset(),
+
+                                    //   // IconButton(
+                                    //   //   icon: const Icon(
+                                    //   //     Icons.add,
+                                    //   //     color: Colors.white,
+                                    //   //     size: 18,
+                                    //   //   ),
+                                    //   //   onPressed: () =>
+                                    //   //       _showNewChatBottomSheet(context),
+                                    //   //   padding: EdgeInsets.zero,
+                                    //   // ),
+                                    // ).onTap(() {
+                                    //   _showNewChatBottomSheet(context);
+                                    // })
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      // Align with message content
+                      height: 0.5,
+
+                      color: Color(0xFF2B2A30), // Very faint line
+                    ),
+                    // Search bar
+                    SizedBox(
+                      height: 10,
+                    ),
+                    Container(
+                      height: 65,
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0F131B),
+                          borderRadius:
+                              BorderRadius.circular(5.0), // 5px border radius
+
+                          // borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: TextField(
+                          style: const TextStyle(color: Color(0xFFE8E7EA)),
+                          // textAlignVertical: TextAlignVertical.center,
+                          decoration: InputDecoration(
+                            hintText: 'Search',
+                            hintStyle: TextStyle(
+                              color: Colors.grey.shade500,
+                              fontSize: 12,
+                            ),
+                            prefixIcon: Icon(
+                              Icons.search,
+                              color: Colors.grey.shade500,
+                              size: 16,
+                            ),
+                            suffixIcon: Image.asset(
+                              'public/images/suffix_icon.png', // or .jpg, .jpeg, etc.
+                              width: 12,
+                              height: 12,
+                              color: const Color(
+                                  0xffE8E7EA), // This applies color filter
+                            ),
+
+                            // SvgPicture.asset(
+                            //   'public/images/suffix_icon.svg',
+                            //   width: 12, // optional: set desired size
+                            //   height: 12,
+                            //   alignment: Alignment.center,
+                            //   colorFilter: ColorFilter.mode(
+                            //     Color(0xffE8E7EA),
+                            //     BlendMode.srcIn,
+                            //   ), // optional: set desired size
+                            // ),
+                            border: InputBorder.none,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 0,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
-          onPressed: () {},
         ),
-        title: Text(
-          'Chats',
-          style: TextStyle(
-            color: Color(0xFFE8E7EA),
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        actions: [
-          IconButton(
-            iconSize: 16,
-            icon: const Icon(Icons.search, color: Color(0xFFE8E7EA)),
-            onPressed: () {},
-          ),
-          IconButton(
-            iconSize: 16,
-            icon: const Icon(Icons.add, color: Color(0xFFE8E7EA)),
-            onPressed: () => _showNewChatBottomSheet(context),
+      ),
+      body: Column(
+        children: [
+          // Stillur logo and Edit button row
+
+          // Chat list
+          Expanded(
+            child: ListView.builder(
+              itemCount: chatItems.length,
+              itemBuilder: (context, index) {
+                final item = chatItems[index];
+                final isLastItem = index == chatItems.length - 1;
+
+                return _buildChatItem(
+                  name: item['name'] as String,
+                  message: item['message'] as String,
+                  time: item['time'] as String,
+                  isVerified: item['isVerified'] as bool? ?? false,
+                  hasUnread: item['hasUnread'] as bool? ?? false,
+                  isOnline: item['isOnline'] as bool? ?? false,
+                  imagePath: item['imagePath'] as String?,
+                  isLastItem: isLastItem,
+                );
+              },
+            ),
           ),
         ],
-      ),
-      body: ListView.builder(
-        itemCount: chatItems.length,
-        itemBuilder: (context, index) {
-          final item = chatItems[index];
-          final isLastItem = index == chatItems.length - 1;
-
-          return _buildChatItem(
-            name: item['name'] as String,
-            message: item['message'] as String,
-            time: item['time'] as String,
-            isVerified: item['isVerified'] as bool? ?? false,
-            hasUnread: item['hasUnread'] as bool? ?? false,
-            isOnline: item['isOnline'] as bool? ?? false,
-            imagePath: item['imagePath'] as String?,
-            isLastItem: isLastItem,
-          );
-        },
       ),
     );
   }

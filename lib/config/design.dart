@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '/config/toast_notification_styles.dart';
 import '/resources/widgets/loader_widget.dart';
@@ -18,7 +21,32 @@ import 'package:nylo_framework/nylo_framework.dart';
 | You can use any font from Google Fonts library.
 | -------------------------------------------------------------------------- */
 
-final TextStyle appFont = TextStyle(fontFamily: 'PlusJakartaSans');
+// final TextStyle appFont = TextStyle(fontFamily: 'PlusJakartaSans');
+
+final TextStyle appFont = _getSystemFont();
+
+TextStyle _getSystemFont() {
+  if (kIsWeb) {
+    // For web, use Inter which is close to Helvetica Neue
+    return GoogleFonts.inter();
+  }
+
+  try {
+    if (Platform.isIOS || Platform.isMacOS) {
+      // Use system font on iOS/macOS (Helvetica Neue/San Francisco)
+      return const TextStyle(fontFamily: '.SF UI Text');
+    } else if (Platform.isAndroid) {
+      // Use Roboto on Android (system default)
+      return const TextStyle(fontFamily: 'Roboto');
+    } else {
+      // Fallback for other platforms
+      return GoogleFonts.inter();
+    }
+  } catch (e) {
+    // Fallback if Platform detection fails
+    return GoogleFonts.inter();
+  }
+}
 // GoogleFonts.outfit();
 // e.g. final TextStyle appThemeFont = GoogleFonts.lato();
 

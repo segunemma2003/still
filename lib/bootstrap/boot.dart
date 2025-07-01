@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '/resources/widgets/splash_screen.dart';
 import '/bootstrap/app.dart';
 import '/config/providers.dart';
@@ -15,6 +16,7 @@ class Boot {
   static Future<Nylo> nylo() async {
     WidgetsFlutterBinding.ensureInitialized();
 
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     if (getEnv('SHOW_SPLASH_SCREEN', defaultValue: false)) {
       runApp(SplashScreen.app());
     }
@@ -26,8 +28,20 @@ class Boot {
   /// This method is called after Nylo is initialized.
   static Future<void> finished(Nylo nylo) async {
     await bootFinished(nylo, providers);
-
+    _setSystemUIStyle();
     runApp(Main(nylo));
+  }
+
+  static void _setSystemUIStyle() {
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark,
+        systemNavigationBarColor: Color(0xFF0F131B),
+        systemNavigationBarIconBrightness: Brightness.light,
+      ),
+    );
   }
 }
 

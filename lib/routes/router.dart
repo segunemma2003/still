@@ -1,3 +1,4 @@
+import '/resources/pages/base_navigation_hub_wrapper_page.dart';
 import '/resources/pages/welcome_page.dart';
 import '/resources/pages/welcome_intro_page.dart';
 import '/resources/pages/profile_details_page.dart';
@@ -50,11 +51,12 @@ appRouter() => nyRoutes((router) {
       router.add(SignUpMobilePage.path);
       router.add(OtpPhoneVerificationPage.path);
       router.add(OtpEmailVerificationPage.path);
-      router.add(BaseNavigationHub.path);
+      router.add(BaseNavigationHub.path).initialRoute();
       router.add(ChatScreenPage.path);
       router.add(VoiceCallPage.path);
       router.add(VideoCallPage.path);
       router.add(ProfileDetailsPage.path);
       router.add(WelcomeIntroPage.path);
-      router.add(WelcomePage.path).initialRoute();
+      router.add(WelcomePage.path);
+      router.add(BaseNavigationHubWrapperPage.path);
     });

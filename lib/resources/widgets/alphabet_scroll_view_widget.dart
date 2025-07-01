@@ -114,7 +114,7 @@ class _AlphabetScrollViewState extends NyState<AlphabetScrollView> {
               height: 36,
               padding: const EdgeInsets.symmetric(horizontal: 16),
               alignment: Alignment.centerLeft,
-              color: const Color(0xFF34495E),
+              color: const Color(0xFF161518),
               child: Text(
                 contact.tagIndex ?? '',
                 style: const TextStyle(
@@ -168,6 +168,12 @@ class _AlphabetScrollViewState extends NyState<AlphabetScrollView> {
                 ),
               ],
             ),
+          ),
+          Container(
+            // Align with message content
+            height: 0.5,
+            margin: const EdgeInsets.only(left: 50, right: 30),
+            color: Color(0xFF2B2A30), // Very faint line
           ),
         ],
       ),

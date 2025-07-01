@@ -60,16 +60,17 @@ ThemeData darkTheme(ColorStyles color) {
       ),
     ),
     appBarTheme: AppBarTheme(
-        surfaceTintColor: Colors.transparent,
-        backgroundColor: color.appBarBackground,
-        titleTextStyle: darkTheme.titleLarge!.copyWith(
-          color: color.appBarPrimaryContent,
-          fontFamily: 'PlusJakartaSans',
-          fontWeight: FontWeight.w600, // SemiBold for app bar
-        ),
-        iconTheme: IconThemeData(color: color.appBarPrimaryContent),
-        elevation: 1.0,
-        systemOverlayStyle: SystemUiOverlayStyle.dark),
+      surfaceTintColor: Colors.transparent,
+      backgroundColor: color.appBarBackground,
+      titleTextStyle: darkTheme.titleLarge!.copyWith(
+        color: color.appBarPrimaryContent,
+        fontFamily: 'PlusJakartaSans',
+        fontWeight: FontWeight.w600, // SemiBold for app bar
+      ),
+      iconTheme: IconThemeData(color: color.appBarPrimaryContent),
+      elevation: 1.0,
+      // systemOverlayStyle: SystemUiOverlayStyle.dark
+    ),
     buttonTheme: ButtonThemeData(
       buttonColor: color.primaryAccent,
       colorScheme: ColorScheme.light(primary: color.buttonBackground),
