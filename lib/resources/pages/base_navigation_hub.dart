@@ -29,8 +29,8 @@ class _BaseNavigationHubState extends NavigationHub<BaseNavigationHub> {
   NavigationHubLayout? layout = NavigationHubLayout.bottomNav(
     selectedFontSize: 13,
     unselectedFontSize: 13,
-    backgroundColor: Colors.transparent, // Keep transparent
-    selectedItemColor: Color(0xFFE8E7EA), // Blue for active items
+    backgroundColor: Colors.transparent, // Keep transparent for blur effect
+    selectedItemColor: Color(0xFFE8E7EA), // White for active items
     unselectedItemColor: const Color(0xFF6E6E6E), // Gray for inactive items
     type: BottomNavigationBarType.fixed, // Ensures all tabs are visible
     elevation: 0, // Remove default elevation
@@ -81,7 +81,7 @@ class _BaseNavigationHubState extends NavigationHub<BaseNavigationHub> {
           return {
             0: NavigationTab(
               title: "Chats",
-              page: ChatsTab(), // Create this widget
+              page: ChatsTab(),
               icon: Container(
                 padding: EdgeInsets.only(top: 2),
                 child: Stack(
@@ -153,8 +153,8 @@ class _BaseNavigationHubState extends NavigationHub<BaseNavigationHub> {
                         padding:
                             EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                         constraints: BoxConstraints(
-                          minWidth: 18, // Reduced from 18
-                          minHeight: 18, // Reduced from 18
+                          minWidth: 18,
+                          minHeight: 18,
                         ),
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
@@ -183,7 +183,7 @@ class _BaseNavigationHubState extends NavigationHub<BaseNavigationHub> {
             ),
             1: NavigationTab(
               title: "Channels",
-              page: ChannelsTab(), // Create this widget
+              page: ChannelsTab(),
               icon: Container(
                 child: SvgPicture.asset(
                   'public/images/channel_tab.svg',
@@ -209,7 +209,7 @@ class _BaseNavigationHubState extends NavigationHub<BaseNavigationHub> {
             ),
             2: NavigationTab(
               title: "Calls",
-              page: CallsTab(), // Create this widget
+              page: CallsTab(),
               icon: Container(
                 child: SvgPicture.asset(
                   'public/images/call.svg',
@@ -235,7 +235,7 @@ class _BaseNavigationHubState extends NavigationHub<BaseNavigationHub> {
             ),
             3: NavigationTab(
               title: "Settings",
-              page: SettingsTab(), // Create this widget
+              page: SettingsTab(),
               icon: Container(
                 child: SvgPicture.asset(
                   'public/images/setting.svg',
@@ -267,5 +267,22 @@ class _BaseNavigationHubState extends NavigationHub<BaseNavigationHub> {
   onTap(int index) {
     super.onTap(index);
     // Add any custom logic when tabs are tapped
+    print('Tab tapped: $index');
+
+    // Debug: Check if navigation is working
+    switch (index) {
+      case 0:
+        print('Navigating to Chats tab');
+        break;
+      case 1:
+        print('Navigating to Channels tab');
+        break;
+      case 2:
+        print('Navigating to Calls tab');
+        break;
+      case 3:
+        print('Navigating to Settings tab');
+        break;
+    }
   }
 }

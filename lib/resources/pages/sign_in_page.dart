@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_app/resources/pages/base_navigation_hub.dart';
 import 'package:flutter_app/resources/pages/sign_up_email_page.dart';
 import 'package:nylo_framework/nylo_framework.dart';
+import '/app/networking/auth_api_service.dart';
+import '/app/models/user.dart';
 
 // Import the bottom sheets
 import '../../app/utils.dart';
@@ -12,10 +14,12 @@ class SignInPage extends NyStatefulWidget {
   SignInPage({super.key}) : super(child: () => _SignInPageState());
 }
 
-class _SignInPageState extends NyPage<SignInPage> {
+class _SignInPageState extends NyPage<SignInPage>
+    with HasApiService<AuthApiService> {
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   bool _isPasswordVisible = false;
+  bool _isLoading = false;
 
   // Gradient colors for consistent styling
   static const List<Color> _gradientColors = [
@@ -129,6 +133,7 @@ class _SignInPageState extends NyPage<SignInPage> {
                                   style:
                                       const TextStyle(color: Color(0xFFE8E7EA)),
                                   textAlignVertical: TextAlignVertical.center,
+                                  keyboardType: TextInputType.text,
                                   decoration: InputDecoration(
                                     labelText: 'Username',
                                     labelStyle: const TextStyle(
@@ -138,7 +143,7 @@ class _SignInPageState extends NyPage<SignInPage> {
                                     ),
                                     floatingLabelBehavior: FloatingLabelBehavior
                                         .never, // Disable floating
-                                    hintText: 'Enter a username',
+                                    hintText: 'Enter your username',
                                     hintStyle: const TextStyle(
                                       color: Color(0xFFE8E7EA),
                                       fontSize: 10,
@@ -292,10 +297,12 @@ class _SignInPageState extends NyPage<SignInPage> {
                         SizedBox(
                           height: 48,
                           child: ElevatedButton(
-                            onPressed: () {
-                              // Handle login
-                              _handleLogin();
-                            },
+                            onPressed: _isLoading
+                                ? null
+                                : () {
+                                    // Handle login
+                                    _handleLogin();
+                                  },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFFC8DEFC),
                               foregroundColor: const Color(0xFFC8DEFC),
@@ -304,14 +311,24 @@ class _SignInPageState extends NyPage<SignInPage> {
                               ),
                               elevation: 0,
                             ),
-                            child: const Text(
-                              'Continue',
-                              style: TextStyle(
-                                fontSize: 16,
-                                color: Color(0xff121417),
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
+                            child: _isLoading
+                                ? const SizedBox(
+                                    height: 24,
+                                    width: 24,
+                                    child: CircularProgressIndicator(
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                          Color(0xff121417)),
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Text(
+                                    'Continue',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      color: Color(0xff121417),
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
                           ),
                         ),
 
@@ -437,7 +454,6 @@ class _SignInPageState extends NyPage<SignInPage> {
                           child: TextButton(
                             onPressed: () {
                               routeTo(SignUpEmailPage.path);
-                              // Navigate to sign up page
                             },
                             child: RichText(
                               text: const TextSpan(
@@ -469,7 +485,7 @@ class _SignInPageState extends NyPage<SignInPage> {
             )));
   }
 
-  void _handleLogin() {
+  void _handleLogin() async {
     String username = _usernameController.text.trim();
     String password = _passwordController.text.trim();
 
@@ -483,20 +499,44 @@ class _SignInPageState extends NyPage<SignInPage> {
       return;
     }
 
-    // Add your login logic here
-    print('Username: $username');
-    print('Password: $password');
+    setState(() {
+      _isLoading = true;
+    });
 
-    // Example: Navigate to home page after successful login
-    // Navigator.pushReplacementNamed(context, '/home');
-    routeTo(BaseNavigationHub.path);
+    try {
+      User? user = await apiService.loginUser(
+        username: username,
+        password: password,
+      );
+
+      if (user != null && user.accessToken != null) {
+        // Login successful, authenticate user and navigate to home
+        await Auth.authenticate(data: user.toJson());
+
+        _showSnackBar('Login successful!', isError: false);
+
+        // Navigate to authenticated route
+        Future.delayed(const Duration(seconds: 1), () {
+          routeToAuthenticatedRoute();
+        });
+      } else {
+        _showSnackBar('Login failed. Please check your credentials.');
+      }
+    } catch (e) {
+      _showSnackBar('An error occurred. Please try again.');
+      print('Login error: $e');
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
-  void _showSnackBar(String message) {
+  void _showSnackBar(String message, {bool isError = true}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: Colors.red,
+        backgroundColor: isError ? Colors.red : Colors.green,
         behavior: SnackBarBehavior.floating,
       ),
     );

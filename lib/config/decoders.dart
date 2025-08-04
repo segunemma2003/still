@@ -1,7 +1,11 @@
-import '/app/models/contact_info.dart';
 import '/app/controllers/home_controller.dart';
+import '/app/models/chat.dart';
+import '/app/models/chat_list_item.dart';
 import '/app/models/user.dart';
 import '/app/networking/api_service.dart';
+import '/app/networking/auth_api_service.dart';
+import '/app/networking/chat_api_service.dart';
+import 'package:nylo_framework/nylo_framework.dart';
 
 /* Model Decoders
 |--------------------------------------------------------------------------
@@ -12,18 +16,13 @@ import '/app/networking/api_service.dart';
 |-------------------------------------------------------------------------- */
 
 final Map<Type, dynamic> modelDecoders = {
-  Map<String, dynamic>: (data) => Map<String, dynamic>.from(data),
-
-  List<User>: (data) =>
-      List.from(data).map((json) => User.fromJson(json)).toList(),
-  //
   User: (data) => User.fromJson(data),
-
-  // User: (data) => User.fromJson(data),
-
-  List<ContactInfo>: (data) => List.from(data).map((json) => ContactInfo.fromJson(json)).toList(),
-
-  ContactInfo: (data) => ContactInfo.fromJson(data),
+  Chat: (data) => Chat.fromJson(data),
+  List<Chat>: (data) =>
+      List.from(data).map((json) => Chat.fromJson(json)).toList(),
+  ChatListItem: (data) => ChatListItem.fromJson(data),
+  List<ChatListItem>: (data) =>
+      List.from(data).map((json) => ChatListItem.fromJson(json)).toList(),
 };
 
 /* API Decoders
@@ -36,8 +35,9 @@ final Map<Type, dynamic> modelDecoders = {
 
 final Map<Type, dynamic> apiDecoders = {
   ApiService: () => ApiService(),
-
-  // ...
+  AuthApiService: () => AuthApiService(),
+  ChatApiService: () => ChatApiService(),
+  HomeController: () => HomeController(),
 };
 
 /* Controller Decoders

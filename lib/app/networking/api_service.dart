@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:pretty_dio_logger/pretty_dio_logger.dart';
 import '/config/decoders.dart';
+import '/app/models/user.dart';
 import 'package:nylo_framework/nylo_framework.dart';
 
 /* ApiService
@@ -56,14 +57,16 @@ class ApiService extends NyApiService {
   | Authenticate your API requests using a bearer token or any other method
   |-------------------------------------------------------------------------- */
 
-  // @override
-  // Future<RequestHeaders> setAuthHeaders(RequestHeaders headers) async {
-  //   String? myAuthToken = await Keys.bearerToken.read();
-  //   if (myAuthToken != null) {
-  //     headers.addBearerToken( myAuthToken );
-  //   }
-  //   return headers;
-  // }
+  @override
+  Future<RequestHeaders> setAuthHeaders(RequestHeaders headers) async {
+    // Always add Bearer token for all requests except auth routes
+    // The auth routes will be handled by AuthApiService which overrides this method
+    Map<String, dynamic>? userData = await Auth.data();
+    if (userData != null && userData['accessToken'] != null) {
+      headers.addBearerToken(userData['accessToken']);
+    }
+    return headers;
+  }
 
   /* Should Refresh Token
   |--------------------------------------------------------------------------
@@ -71,10 +74,12 @@ class ApiService extends NyApiService {
   | Set `false` if your API does not require a token refresh
   |-------------------------------------------------------------------------- */
 
-  // @override
-  // Future<bool> shouldRefreshToken() async {
-  //   return false;
-  // }
+  @override
+  Future<bool> shouldRefreshToken() async {
+    // For now, we'll return false since we don't have token expiration logic
+    // You can implement token expiration checking here
+    return false;
+  }
 
   /* Refresh Token
   |--------------------------------------------------------------------------
@@ -83,10 +88,10 @@ class ApiService extends NyApiService {
   | local storage and then use the value in `setAuthHeaders`.
   |-------------------------------------------------------------------------- */
 
-  // @override
-  // refreshToken(Dio dio) async {
-  //  dynamic response = (await dio.get("https://example.com/refresh-token")).data;
-  //  // Save the new token
-  //   await Keys.bearerToken.save(response['token']);
-  // }
+  @override
+  refreshToken(Dio dio) async {
+    // Implement token refresh logic here if needed
+    // For now, we'll just logout the user
+    await Auth.logout();
+  }
 }

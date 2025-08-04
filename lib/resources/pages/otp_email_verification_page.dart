@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:nylo_framework/nylo_framework.dart';
+import '/resources/pages/sign_in_page.dart';
 
 class OtpEmailVerificationPage extends NyStatefulWidget {
   static RouteView path =
@@ -14,8 +15,8 @@ class _OtpEmailVerificationPageState extends NyPage<OtpEmailVerificationPage> {
   final List<TextEditingController> _controllers =
       List.generate(4, (index) => TextEditingController());
   final List<FocusNode> _focusNodes = List.generate(4, (index) => FocusNode());
-  String email =
-      'johndoe@stillur.com'; // This should be passed from previous page
+  String email = 'johndoe@stillur.com'; // Default email
+  bool _isLoading = false;
 
   // Gradient colors for consistent styling (matching other pages)
   static const List<Color> _gradientColors = [
@@ -25,9 +26,15 @@ class _OtpEmailVerificationPageState extends NyPage<OtpEmailVerificationPage> {
 
   @override
   get init => () {
-        // Initialize any required data here
-        // You can get the email from route arguments
-        // email = widget.data ?? 'johndoe@stillur.com';
+        // Get the email from route data
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          final emailData = data();
+          if (emailData != null && emailData['email'] != null) {
+            setState(() {
+              email = emailData['email'];
+            });
+          }
+        });
       };
 
   @override
@@ -217,9 +224,11 @@ class _OtpEmailVerificationPageState extends NyPage<OtpEmailVerificationPage> {
                     SizedBox(
                       height: 48,
                       child: ElevatedButton(
-                        onPressed: () {
-                          _verifyCode();
-                        },
+                        onPressed: _isLoading
+                            ? null
+                            : () {
+                                _verifyCode();
+                              },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFFC8DEFC),
                           foregroundColor: const Color(0xFFC8DEFC),
@@ -228,14 +237,24 @@ class _OtpEmailVerificationPageState extends NyPage<OtpEmailVerificationPage> {
                           ),
                           elevation: 0,
                         ),
-                        child: const Text(
-                          'Continue',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Color(0xff121417),
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+                        child: _isLoading
+                            ? const SizedBox(
+                                height: 24,
+                                width: 24,
+                                child: CircularProgressIndicator(
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                      Color(0xff121417)),
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Text(
+                                'Continue',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  color: Color(0xff121417),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                       ),
                     ),
 
@@ -261,7 +280,7 @@ class _OtpEmailVerificationPageState extends NyPage<OtpEmailVerificationPage> {
     }
   }
 
-  void _verifyCode() {
+  void _verifyCode() async {
     String code = _controllers.map((controller) => controller.text).join();
 
     if (code.length != 4) {
@@ -269,14 +288,17 @@ class _OtpEmailVerificationPageState extends NyPage<OtpEmailVerificationPage> {
       return;
     }
 
-    // Add your verification logic here
-    print('Verification code: $code');
-    print('Email: $email');
+    setState(() {
+      _isLoading = true;
+    });
 
-    // Example: Navigate to success page or home
-    // Navigator.pushReplacementNamed(context, '/home');
-
+    // For now, accept any 4-digit code without API call
     _showSnackBar('Code verified successfully!', isError: false);
+
+    // Navigate to login page after successful verification
+    Future.delayed(const Duration(seconds: 1), () {
+      routeTo(SignInPage.path, navigationType: NavigationType.pushAndForgetAll);
+    });
   }
 
   void _resendCode() {

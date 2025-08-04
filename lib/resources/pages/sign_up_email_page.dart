@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:nylo_framework/nylo_framework.dart';
+import '/resources/pages/otp_email_verification_page.dart';
+import '/app/networking/auth_api_service.dart';
+import '/app/models/user.dart';
+import '/resources/pages/sign_in_page.dart';
 
 class SignUpEmailPage extends NyStatefulWidget {
   static RouteView path = ("/sign-up-email", (_) => SignUpEmailPage());
@@ -7,7 +11,8 @@ class SignUpEmailPage extends NyStatefulWidget {
   SignUpEmailPage({super.key}) : super(child: () => _SignUpEmailPageState());
 }
 
-class _SignUpEmailPageState extends NyPage<SignUpEmailPage> {
+class _SignUpEmailPageState extends NyPage<SignUpEmailPage>
+    with HasApiService<AuthApiService> {
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
@@ -15,6 +20,7 @@ class _SignUpEmailPageState extends NyPage<SignUpEmailPage> {
       TextEditingController();
   bool _isPasswordVisible = false;
   bool _isConfirmPasswordVisible = false;
+  bool _isLoading = false;
 
   // Gradient colors for consistent styling (matching SignInPage)
   static const List<Color> _gradientColors = [
@@ -261,10 +267,12 @@ class _SignUpEmailPageState extends NyPage<SignUpEmailPage> {
                     SizedBox(
                       height: 48,
                       child: ElevatedButton(
-                        onPressed: () {
-                          // Handle signup
-                          _handleSignUp();
-                        },
+                        onPressed: _isLoading
+                            ? null
+                            : () {
+                                // Handle signup
+                                _handleSignUp();
+                              },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFFC8DEFC),
                           foregroundColor: const Color(0xFFC8DEFC),
@@ -273,14 +281,24 @@ class _SignUpEmailPageState extends NyPage<SignUpEmailPage> {
                           ),
                           elevation: 0,
                         ),
-                        child: const Text(
-                          'Continue',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Color(0xff121417),
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+                        child: _isLoading
+                            ? const SizedBox(
+                                height: 24,
+                                width: 24,
+                                child: CircularProgressIndicator(
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                      Color(0xff121417)),
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Text(
+                                'Continue',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  color: Color(0xff121417),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                       ),
                     ),
 
@@ -363,8 +381,7 @@ class _SignUpEmailPageState extends NyPage<SignUpEmailPage> {
                     Center(
                       child: TextButton(
                         onPressed: () {
-                          // Navigate to login page
-                          Navigator.pushNamed(context, '/sign-in');
+                          routeTo(SignInPage.path);
                         },
                         child: RichText(
                           text: const TextSpan(
@@ -398,7 +415,7 @@ class _SignUpEmailPageState extends NyPage<SignUpEmailPage> {
     );
   }
 
-  void _handleSignUp() {
+  void _handleSignUp() async {
     String username = _usernameController.text.trim();
     String email = _emailController.text.trim();
     String password = _passwordController.text.trim();
@@ -439,13 +456,35 @@ class _SignUpEmailPageState extends NyPage<SignUpEmailPage> {
       return;
     }
 
-    // Add your signup logic here
-    print('Username: $username');
-    print('Email: $email');
-    print('Password: $password');
+    setState(() {
+      _isLoading = true;
+    });
 
-    // Example: Navigate to verification page or home
-    // Navigator.pushReplacementNamed(context, '/verification');
+    try {
+      Map<String, dynamic> result = await apiService.registerUser(
+        email: email,
+        username: username,
+        password: password,
+      );
+
+      if (result['success'] == true) {
+        // Registration successful, navigate to OTP verification
+        User user = result['user'];
+        routeTo(OtpEmailVerificationPage.path, data: {'email': email});
+      } else {
+        // Registration failed, show specific error message
+        String errorMessage =
+            result['message'] ?? 'Registration failed. Please try again.';
+        _showSnackBar(errorMessage);
+      }
+    } catch (e) {
+      _showSnackBar('An error occurred. Please try again.');
+      print('Registration error: $e');
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
   bool _isValidEmail(String email) {
