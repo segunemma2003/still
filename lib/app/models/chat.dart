@@ -1,15 +1,26 @@
+import '/app/models/chat_partner.dart';
+import '/app/models/message.dart';
+
 class Chat {
   final int id;
+  final int creatorId;
+
   final String? name;
   final String type;
   final bool isPublic;
   final String? inviteCode;
   final DateTime createdAt;
   final DateTime updatedAt;
+
   final List<ChatUser> users;
+  final Partner? partner;
+  final List<Message> messages;
 
   Chat({
     required this.id,
+    required this.creatorId,
+    required this.partner,
+    required this.messages,
     this.name,
     required this.type,
     required this.isPublic,
@@ -22,15 +33,27 @@ class Chat {
   factory Chat.fromJson(Map<String, dynamic> json) {
     return Chat(
       id: json['id'],
-      name: json['name'],
+      creatorId: json['creatorId'],
+      name: json['type'] == 'CHANNEL'
+          ? json['name']
+          : (json['type'] == 'PRIVATE' && json['partner'] != null)
+              ? json['partner']['username']
+              : "Unknown",
       type: json['type'],
       isPublic: json['isPublic'],
       inviteCode: json['inviteCode'],
+      messages: (json['messages'] as List<dynamic>?)
+              ?.map((msg) => Message.fromJson(msg))
+              .toList() ??
+          [],
+      partner:
+          json['partner'] != null ? Partner.fromJson(json['partner']) : null,
       createdAt: DateTime.parse(json['createdAt']),
       updatedAt: DateTime.parse(json['updatedAt']),
-      users: (json['Users'] as List)
-          .map((userJson) => ChatUser.fromJson(userJson))
-          .toList(),
+      users: (json['members'] as List<dynamic>?)
+              ?.map((userJson) => ChatUser.fromJson(userJson))
+              .toList() ??
+          [],
     );
   }
 

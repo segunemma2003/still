@@ -1,14 +1,16 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
+// import 'dart:io';
 import 'package:nylo_framework/nylo_framework.dart';
+import 'package:socket_io_client/socket_io_client.dart' as IO;
 
 class WebSocketService {
   static final WebSocketService _instance = WebSocketService._internal();
   factory WebSocketService() => _instance;
   WebSocketService._internal();
+  IO.Socket? _socket;
 
-  WebSocket? _webSocket;
+  // WebSocket? _webSocket;
   String? _currentChatId;
   bool _isConnected = false;
   bool _isConnecting = false;
@@ -35,32 +37,58 @@ class WebSocketService {
   bool get isConnected => _isConnected;
   String? get currentChatId => _currentChatId;
 
-  /// Initialize WebSocket connection for general notifications and chat list updates
+  /// Initialize Socket.IO connection for general notifications and chat list updates
   Future<void> initializeConnection() async {
-    if (_isConnecting || _isConnected) return;
+    if (_socket != null && _socket!.connected) return;
 
     _isConnecting = true;
     try {
-      final baseUrl = getEnv('API_BASE_URL').replaceFirst('http', 'ws');
-      final wsUrl = '$baseUrl/ws/user';
+      Map<String, dynamic>? userData = await Auth.data();
+      String? accessToken = userData != null ? userData['accessToken'] : null;
 
-      _webSocket = await WebSocket.connect(wsUrl);
-      _isConnected = true;
-      _isConnecting = false;
-      _reconnectAttempts = 0;
+      _socket = IO.io(getEnv('API_BASE_URL'), <String, dynamic>{
+        'transports': <String>['websocket'],
+        'autoConnect': false,
+        'auth': {
+          'token': accessToken,
+        },
+      });
+      _socket!.connect();
 
-      _connectionStatusController.add(true);
-      print('WebSocket connected successfully for user notifications');
+      _socket!.on('connect', (_) async {
+        print('Socket.IO connected');
+        _isConnected = true;
+        _isConnecting = false;
+        _reconnectAttempts = 0;
+        _connectionStatusController.add(true);
+        await _sendAuthMessage();
+      });
 
-      // Listen for incoming messages
-      _webSocket!.listen(
-        (data) => _handleIncomingMessage(data),
-        onError: (error) => _handleError(error),
-        onDone: () => _handleDisconnection(),
-      );
+      _socket!.on('disconnect', (_) {
+        print('Socket.IO disconnected');
+        _isConnected = false;
+        _connectionStatusController.add(false);
+        // _handleDisconnection();
+      });
 
-      // Send authentication message
-      await _sendAuthMessage();
+      _socket!.on('message',
+          (data) => _handleIncomingMessage('message', jsonEncode(data)));
+      _socket!.on('message:new',
+          (data) => _handleIncomingMessage('message:new', jsonEncode(data)));
+      _socket!.on('message:edit',
+          (data) => _handleIncomingMessage('message:edit', jsonEncode(data)));
+      _socket!.on('message:delete',
+          (data) => _handleIncomingMessage('message:delete', jsonEncode(data)));
+      _socket!.on('notification',
+          (data) => _handleIncomingMessage('notification', jsonEncode(data)));
+      _socket!.on(
+          'chat_list_update',
+          (data) =>
+              _handleIncomingMessage('chat_list_update', jsonEncode(data)));
+      _socket!.on('typing',
+          (data) => _handleIncomingMessage('typing', jsonEncode(data)));
+      _socket!.on('read_receipt',
+          (data) => _handleIncomingMessage('read_receipt', jsonEncode(data)));
     } catch (e) {
       _isConnecting = false;
       _handleError(e);
@@ -80,25 +108,13 @@ class WebSocketService {
     }
 
     try {
-      final baseUrl = getEnv('API_BASE_URL').replaceFirst('http', 'ws');
-      final wsUrl = '$baseUrl/ws/chat/$chatId';
-
-      _webSocket = await WebSocket.connect(wsUrl);
       _currentChatId = chatId;
+      // Optionally emit a join event to the server for the chat room
+      _socket?.emit('join_chat', {'chatId': chatId});
       _isConnected = true;
       _reconnectAttempts = 0;
-
       _connectionStatusController.add(true);
-      print('WebSocket connected to chat $chatId');
-
-      // Listen for incoming messages
-      _webSocket!.listen(
-        (data) => _handleIncomingMessage(data),
-        onError: (error) => _handleError(error),
-        onDone: () => _handleDisconnection(),
-      );
-
-      // Send authentication message
+      print('Socket.IO joined chat $chatId');
       await _sendAuthMessage();
     } catch (e) {
       print('Error connecting to chat $chatId: $e');
@@ -115,7 +131,7 @@ class WebSocketService {
           'type': 'auth',
           'token': userData['accessToken'],
         };
-        _webSocket?.add(jsonEncode(authMessage));
+        _socket?.emit('auth', authMessage);
       }
     } catch (e) {
       print('Error sending auth message: $e');
@@ -123,14 +139,21 @@ class WebSocketService {
   }
 
   /// Handle incoming messages and route them to appropriate streams
-  void _handleIncomingMessage(dynamic data) {
+  void _handleIncomingMessage(String type, dynamic data) {
     try {
       final messageData = jsonDecode(data);
-      final messageType = messageData['type'];
-
-      switch (messageType) {
-        case 'message':
+      print('Received message of type $type: $messageData');
+      switch (type) {
+        case 'message:new':
           _messageController.add(messageData);
+          break;
+        case 'message:edit':
+          print('Editing message: $messageData');
+          _messageController.add(messageData);
+          break;
+        case 'message:delete':
+          print('Deleting message: $messageData');
+          _messageController.add({'action': 'delete', ...messageData});
           break;
         case 'notification':
           _notificationController.add(messageData);
@@ -145,7 +168,7 @@ class WebSocketService {
           _messageController.add(messageData);
           break;
         default:
-          print('Unknown message type: $messageType');
+          print('Unknown message type: $type');
       }
     } catch (e) {
       print('Error parsing incoming message: $e');
@@ -153,21 +176,25 @@ class WebSocketService {
   }
 
   /// Send a message to the current chat
-  Future<void> sendMessage(String message) async {
-    if (!_isConnected || _webSocket == null) {
-      print('WebSocket not connected');
+  Future<void> sendMessage(String message, int chatId) async {
+    if (!_isConnected || _socket == null) {
+      print('Socket.IO not connected');
       return;
     }
 
     try {
       final messageData = {
-        'type': 'message',
-        'content': message,
-        'chatId': _currentChatId,
-        'timestamp': DateTime.now().toIso8601String(),
+        'type': 'TEXT',
+        'text': message,
+        'chatId': chatId,
       };
 
-      _webSocket!.add(jsonEncode(messageData));
+      print('Sending message: $messageData');
+      final jsonString = jsonEncode(messageData);
+      _socket!.emit('message:send', jsonString);
+      _socket!.emit(
+        'message:send',
+      );
       print('Message sent: $message');
     } catch (e) {
       print('Error sending message: $e');
@@ -175,17 +202,17 @@ class WebSocketService {
   }
 
   /// Send typing indicator
-  Future<void> sendTypingIndicator(bool isTyping) async {
-    if (!_isConnected || _webSocket == null) return;
+  Future<void> sendTypingIndicator(bool isTyping, int chatId) async {
+    if (!_isConnected || _socket == null) return;
 
     try {
       final typingData = {
-        'type': 'typing',
-        'isTyping': isTyping,
-        'chatId': _currentChatId,
+        'chatId': chatId,
       };
 
-      _webSocket!.add(jsonEncode(typingData));
+      final event = isTyping ? 'typing:start' : 'typing:stop';
+      print('Sending typing indicator: $event with data: $typingData');
+      _socket!.emit(event, jsonEncode(typingData));
     } catch (e) {
       print('Error sending typing indicator: $e');
     }
@@ -193,7 +220,7 @@ class WebSocketService {
 
   /// Send read receipt
   Future<void> sendReadReceipt(String messageId) async {
-    if (!_isConnected || _webSocket == null) return;
+    if (!_isConnected || _socket == null) return;
 
     try {
       final readData = {
@@ -202,7 +229,7 @@ class WebSocketService {
         'chatId': _currentChatId,
       };
 
-      _webSocket!.add(jsonEncode(readData));
+      _socket!.emit('read_receipt', readData);
     } catch (e) {
       print('Error sending read receipt: $e');
     }
@@ -210,14 +237,14 @@ class WebSocketService {
 
   /// Request chat list updates
   Future<void> requestChatList() async {
-    if (!_isConnected || _webSocket == null) return;
+    if (!_isConnected || _socket == null) return;
 
     try {
       final requestData = {
         'type': 'get_chat_list',
       };
 
-      _webSocket!.add(jsonEncode(requestData));
+      _socket!.emit('get_chat_list', requestData);
     } catch (e) {
       print('Error requesting chat list: $e');
     }
@@ -266,14 +293,13 @@ class WebSocketService {
 
   /// Disconnect from current chat
   Future<void> _disconnectFromChat() async {
-    if (_webSocket != null) {
+    if (_socket != null && _currentChatId != null) {
       try {
         final disconnectData = {
           'type': 'leave_chat',
           'chatId': _currentChatId,
         };
-        _webSocket!.add(jsonEncode(disconnectData));
-        await _webSocket!.close();
+        _socket!.emit('leave_chat', disconnectData);
       } catch (e) {
         print('Error disconnecting from chat: $e');
       }
@@ -284,17 +310,18 @@ class WebSocketService {
 
   /// Disconnect completely
   Future<void> disconnect() async {
-    _reconnectTimer?.cancel();
-    await _disconnectFromChat();
-    _webSocket?.close();
-    _webSocket = null;
-    _isConnected = false;
-    _connectionStatusController.add(false);
-    print('WebSocket disconnected completely');
+    // _reconnectTimer?.cancel();
+    // await _disconnectFromChat();
+    // _socket?.disconnect();
+    // _socket = null;
+    // _isConnected = false;
+    // _connectionStatusController.add(false);
+    // print('Socket.IO disconnected completely');
   }
 
   /// Dispose resources
   void dispose() {
+    print("Disposing WebSocketService");
     disconnect();
     _messageController.close();
     _notificationController.close();

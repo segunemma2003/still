@@ -108,12 +108,12 @@ class AuthApiService extends NyApiService {
 
   /// Login user
   Future<User?> loginUser({
-    required String email,
+    required String username,
     required String password,
   }) async {
     return await network<User>(
       request: (request) => request.post("/auth/login", data: {
-        "email": email,
+        "username": username,
         "password": password,
       }),
       handleSuccess: (Response response) {

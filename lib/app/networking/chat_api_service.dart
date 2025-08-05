@@ -3,6 +3,8 @@ import 'package:nylo_framework/nylo_framework.dart';
 import '/app/models/chat.dart';
 import '/app/models/chat_list_item.dart';
 import '/app/networking/api_service.dart';
+import "/app/models/chat_list_response.dart";
+import "/app/models/search_char_response.dart";
 
 class ChatApiService extends ApiService {
   ChatApiService({BuildContext? buildContext})
@@ -12,15 +14,33 @@ class ChatApiService extends ApiService {
   String get baseUrl => getEnv('API_BASE_URL');
 
   /// Get list of all chats for the current user
-  Future<List<ChatListItem>?> getChatList() async {
-    return await network<List<ChatListItem>>(
-      request: (request) => request.get("/chat/list"),
+  Future<ChatListResponse?> getChatList() async {
+    return await network<ChatListResponse>(
+      request: (request) => request.get("/chat"),
+    );
+  }
+
+  Future<List<SearchUser>?> searchChat({
+    required String query,
+    int? limit,
+    int? offset,
+  }) async {
+    return await network<List<SearchUser>>(
+      request: (request) => request.get(
+        "/chat/search",
+        queryParameters: {
+          "query": query,
+          "type": "user",
+          if (limit != null) 'limit': limit,
+          if (offset != null) 'offset': offset,
+        },
+      ),
     );
   }
 
   /// Create or get a private chat with a partner
-  Future<Chat?> createPrivateChat({required int partnerId}) async {
-    return await network<Chat>(
+  Future<ChatListItem?> createPrivateChat({required int partnerId}) async {
+    return await network<ChatListItem>(
       request: (request) => request.post(
         "/chat",
         data: {

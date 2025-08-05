@@ -1,12 +1,16 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_app/app/models/search_char_response.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:nylo_framework/nylo_framework.dart';
 import '/app/models/chat_list_item.dart';
+import '/app/models/chat_list_response.dart';
 import '/app/networking/chat_api_service.dart';
 import '/app/networking/websocket_service.dart';
 import '/resources/pages/chat_screen_page.dart';
 import '/resources/widgets/alphabet_scroll_view_widget.dart';
+import '/app/models/message.dart';
+// import "/app/models/search_user.dart";
 
 class ChatsTab extends StatefulWidget {
   @override
@@ -15,10 +19,12 @@ class ChatsTab extends StatefulWidget {
 
 class _ChatsTabState extends State<ChatsTab>
     with HasApiService<ChatApiService> {
-  List<ChatListItem> _chatList = [];
+  ChatListResponse? _chatListResponse;
   bool _isLoading = true;
   String _searchQuery = '';
+  List<SearchUser> _searchUsers = [];
   StreamSubscription<Map<String, dynamic>>? _wsSubscription;
+  StreamSubscription<Map<String, dynamic>>? _msgStream;
   StreamSubscription<bool>? _connectionSubscription;
 
   @override
@@ -36,6 +42,9 @@ class _ChatsTabState extends State<ChatsTab>
     _wsSubscription = WebSocketService().chatListStream.listen((data) {
       _handleChatListUpdate(data);
     });
+    _msgStream = WebSocketService().messageStream.listen((messageData) {
+      _handleIncomingMessage(messageData);
+    });
 
     // Listen for connection status
     _connectionSubscription =
@@ -48,15 +57,17 @@ class _ChatsTabState extends State<ChatsTab>
   }
 
   Future<void> _loadChatList() async {
+    print("Loading chat list...");
     setState(() {
       _isLoading = true;
     });
 
     try {
-      final chatList = await apiService.getChatList();
-      if (chatList != null) {
+      final chatListResponse = await apiService.getChatList();
+
+      if (chatListResponse != null) {
         setState(() {
-          _chatList = chatList;
+          _chatListResponse = chatListResponse;
           _isLoading = false;
         });
       }
@@ -68,25 +79,56 @@ class _ChatsTabState extends State<ChatsTab>
     }
   }
 
+  void _handleIncomingMessage(Map<String, dynamic> messageData) {
+    // This runs on the main thread and won't block UI
+    print('Handling incoming message: $messageData');
+    Message newMessage = Message.fromJson(messageData);
+
+    setState(() {
+      if (_chatListResponse == null) return;
+      final chats = List<ChatListItem>.from(_chatListResponse!.chats);
+      final index = chats.indexWhere((chat) => chat.id == newMessage.chatId);
+      if (index != -1) {
+        final chat = chats[index];
+        chats[index] = chat.copyWith(
+          lastMessage: newMessage,
+          lastMessageTime: newMessage.createdAt,
+          unreadCount: (chat.unreadCount ?? 0) + 1,
+        );
+        // Optionally move chat to top
+        final updatedChat = chats.removeAt(index);
+        chats.insert(0, updatedChat);
+      }
+      final _aChatListResponse = _chatListResponse!.copyWith(chats: chats);
+
+      setState(() {
+        _chatListResponse = _aChatListResponse;
+      });
+    });
+  }
+
   void _handleChatListUpdate(Map<String, dynamic> data) {
     // Handle real-time chat list updates from WebSocket
     if (data['type'] == 'chat_list_update') {
       final updatedChat = ChatListItem.fromJson(data['chat']);
 
       setState(() {
-        final index = _chatList.indexWhere((chat) => chat.id == updatedChat.id);
+        if (_chatListResponse == null) return;
+        final chats = List<ChatListItem>.from(_chatListResponse!.chats);
+        final index = chats.indexWhere((chat) => chat.id == updatedChat.id);
         if (index != -1) {
-          _chatList[index] = updatedChat;
+          chats[index] = updatedChat;
         } else {
-          _chatList.insert(0, updatedChat); // Add new chat at top
+          chats.insert(0, updatedChat); // Add new chat at top
         }
 
         // Sort by last message time
-        _chatList.sort((a, b) {
+        chats.sort((a, b) {
           final aTime = a.lastMessageTime ?? DateTime(1900);
           final bTime = b.lastMessageTime ?? DateTime(1900);
           return bTime.compareTo(aTime);
         });
+        _chatListResponse = _chatListResponse!.copyWith(chats: chats);
       });
     }
   }
@@ -117,24 +159,46 @@ class _ChatsTabState extends State<ChatsTab>
     }
   }
 
-  void _onSearchChanged(String query) {
+  Future<void> _onSearchChanged(String query) async {
+    // final isEmpty = query.trim().isEmpty;
+    if (query.trim().isNotEmpty) {
+      final searchResponse = await apiService.searchChat(query: query);
+
+      if (searchResponse != null) {
+        setState(() {
+          _searchUsers = searchResponse;
+        });
+      } else {
+        setState(() {
+          _searchUsers = [];
+        });
+      }
+      print('Search response: $searchResponse');
+      // Clear search results
+    }
+
     setState(() {
       _searchQuery = query;
     });
   }
 
-  List<ChatListItem> get _filteredChatList {
-    if (_searchQuery.isEmpty) {
-      return _chatList;
+  Future<void> _onSearchUserTapped(int userId) async {
+    final newChat = await apiService.createPrivateChat(partnerId: userId);
+    print('New chat created with user ID: $userId');
+    if (newChat != null) {
+      // Navigate to the new chat screen
+      final cdw = await apiService.getChatDetails(chatId: newChat.id);
+      if (cdw != null) {
+        routeTo(ChatScreenPage.path, data: {
+          'chat': cdw,
+        });
+      }
     }
+  }
 
-    return _chatList.where((chat) {
-      return chat.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          (chat.lastMessage
-                  ?.toLowerCase()
-                  .contains(_searchQuery.toLowerCase()) ??
-              false);
-    }).toList();
+  List<ChatListItem> get _filteredChatList {
+    final chats = _chatListResponse?.chats ?? [];
+    return chats;
   }
 
   @override
@@ -165,55 +229,111 @@ class _ChatsTabState extends State<ChatsTab>
 
         // Chat list
         Expanded(
-          child: _isLoading
-              ? const Center(
-                  child: CircularProgressIndicator(
-                    color: Color(0xFF3498DB),
-                  ),
-                )
-              : _filteredChatList.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(
-                            Icons.chat_bubble_outline,
-                            color: Color(0xFF6E6E6E),
-                            size: 64,
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            _searchQuery.isEmpty
-                                ? 'No chats yet'
-                                : 'No chats found',
-                            style: const TextStyle(
-                              color: Color(0xFFE8E7EA),
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            _searchQuery.isEmpty
-                                ? 'Start a conversation to see your chats here'
-                                : 'Try a different search term',
-                            style: const TextStyle(
-                              color: Color(0xFF6E6E6E),
-                              fontSize: 14,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                      ),
-                    )
-                  : ListView.builder(
-                      itemCount: _filteredChatList.length,
-                      itemBuilder: (context, index) {
-                        final chat = _filteredChatList[index];
-                        return _buildChatItem(chat);
-                      },
+            child: _isLoading
+                ? const Center(
+                    child: CircularProgressIndicator(
+                      color: Color(0xFF3498DB),
                     ),
-        ),
+                  )
+                : (_searchQuery.isNotEmpty
+                    ? (_searchUsers.isEmpty
+                        ? Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(
+                                  Icons.chat_bubble_outline,
+                                  color: Color(0xFF6E6E6E),
+                                  size: 64,
+                                ),
+                                const SizedBox(height: 16),
+                                const Text(
+                                  'No users found',
+                                  style: TextStyle(
+                                    color: Color(0xFFE8E7EA),
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                const Text(
+                                  'Try a different search term',
+                                  style: TextStyle(
+                                    color: Color(0xFF6E6E6E),
+                                    fontSize: 14,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
+                            ),
+                          )
+                        : ListView.builder(
+                            itemCount: _searchUsers.length,
+                            itemBuilder: (context, index) {
+                              final user = _searchUsers[index];
+                              return ListTile(
+                                leading: CircleAvatar(
+                                  backgroundColor: Colors.grey.shade700,
+                                  backgroundImage: user.avatar != null
+                                      ? NetworkImage(user.avatar!)
+                                      : null,
+                                  child: user.avatar == null
+                                      ? Icon(Icons.person,
+                                          color: Colors.grey.shade500)
+                                      : null,
+                                ),
+                                title: Text(
+                                  user.username,
+                                  style: const TextStyle(
+                                    color: Color(0xFFE8E7EA),
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                onTap: () {
+                                  _onSearchUserTapped(user.id);
+                                },
+                              );
+                            },
+                          ))
+                    : (_filteredChatList.isEmpty
+                        ? Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(
+                                  Icons.chat_bubble_outline,
+                                  color: Color(0xFF6E6E6E),
+                                  size: 64,
+                                ),
+                                const SizedBox(height: 16),
+                                const Text(
+                                  'No chats yet',
+                                  style: TextStyle(
+                                    color: Color(0xFFE8E7EA),
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                const Text(
+                                  'Start a conversation to see your chats here',
+                                  style: TextStyle(
+                                    color: Color(0xFF6E6E6E),
+                                    fontSize: 14,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
+                            ),
+                          )
+                        : ListView.builder(
+                            itemCount: _filteredChatList.length,
+                            itemBuilder: (context, index) {
+                              final chat = _filteredChatList[index];
+                              return _buildChatItem(chat);
+                            },
+                          )))),
       ],
     );
   }
@@ -289,7 +409,7 @@ class _ChatsTabState extends State<ChatsTab>
                     children: [
                       Expanded(
                         child: Text(
-                          chat.lastMessage ?? 'No messages yet',
+                          chat.lastMessage?.text ?? 'No messages yet',
                           style: TextStyle(
                             color: chat.unreadCount > 0
                                 ? const Color(0xFFE8E7EA)

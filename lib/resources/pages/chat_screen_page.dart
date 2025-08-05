@@ -4,6 +4,8 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_app/app/models/message.dart';
+import 'package:flutter_app/resources/pages/home_page.dart';
 import 'package:flutter_svg/svg.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:photo_manager/photo_manager.dart';
@@ -15,6 +17,8 @@ import '/app/networking/chat_api_service.dart';
 import '/app/networking/websocket_service.dart';
 import '/resources/pages/video_call_page.dart';
 import '/resources/pages/voice_call_page.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:file_picker/file_picker.dart';
 
 class ChatScreenPage extends NyStatefulWidget {
   static RouteView path = ("/chat-screen", (_) => ChatScreenPage());
@@ -36,129 +40,58 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
   String? _userImage;
   bool _isOnline = false;
   bool _isVerified = false;
+  bool _isTyping = false;
+  Set<int> _typingUsers = {};
 
   // WebSocket integration
   StreamSubscription<Map<String, dynamic>>? _wsSubscription;
+  StreamSubscription<Map<String, dynamic>>? _notificationSubscription;
   bool _isWebSocketConnected = false;
 
-  List<Message> messages = [
-    Message(
-      text: "Hello",
-      time: "20:56",
-      isSent: true,
-      isDelivered: true,
-    ),
-    Message(
-      text: "Hi,\nWelcome to stillur Chat App",
-      time: "20:57",
-      isSent: false,
-    ),
-    Message(
-      text: "Thank you",
-      time: "21:16",
-      isSent: true,
-      isDelivered: true,
-    ),
-    Message(
-      text:
-          "Stillur is a privacy-first encrypted chat application. Your messages are always private and secure.",
-      time: "21:20",
-      isSent: false,
-    ),
-    Message(
-      text: "",
-      time: "21:36",
-      isSent: true,
-      isDelivered: true,
-      isAudio: true,
-      audioDuration: "0:15",
-    ),
-    Message(
-      text: "Chat app where you can truly escape.",
-      time: "21:22",
-      isSent: false,
-    ),
-    Message(
-      text:
-          "End-to-end encryption keeps your chats safe and unseen, not even we can read them.",
-      time: "21:56",
-      isSent: false,
-    ),
-    Message(
-      text: "Hello",
-      time: "20:56",
-      isSent: true,
-      isDelivered: true,
-    ),
-    Message(
-      text: "Hi,\nWelcome to stillur Chat App",
-      time: "20:57",
-      isSent: false,
-    ),
-    Message(
-      text: "Thank you",
-      time: "21:16",
-      isSent: true,
-      isDelivered: true,
-    ),
-    Message(
-      text:
-          "Stillur is a privacy-first encrypted chat application. Your messages are always private and secure.",
-      time: "21:20",
-      isSent: false,
-    ),
-    Message(
-      text: "",
-      time: "21:36",
-      isSent: true,
-      isDelivered: true,
-      isAudio: true,
-      audioDuration: "0:15",
-    ),
-    Message(
-      text: "Chat app where you can truly escape.",
-      time: "21:22",
-      isSent: false,
-    ),
-    Message(
-      text:
-          "End-to-end encryption keeps your chats safe and unseen, not even we can read them.",
-      time: "21:56",
-      isSent: false,
-    ),
-  ];
-
+  List<Message> messages = [];
+  int? _currentUserId;
   @override
   get init => () async {
         print("Init method called"); // Debug
         _messageController.addListener(_onTextChanged);
+        // _messageController.addListener(listener)
+        // Get current user id from Auth
+        try {
+          final userData = await Auth.data();
+          if (userData != null && userData['id'] != null) {
+            _currentUserId = userData['id'] is int
+                ? userData['id']
+                : int.tryParse(userData['id'].toString());
+            print('Current user id: [38;5;246m$_currentUserId[0m');
+          }
+        } catch (e) {
+          print('Error fetching user id: $e');
+        }
 
         // Retrieve chat data from navigation
         final navigationData = data();
         if (navigationData != null) {
           _chat = navigationData['chat'] as Chat?;
+          print('Chat data from navigation: $_chat');
+          print(
+              'Chat list item from navigation: ${navigationData['chatListItem']}');
           final chatListItem = navigationData['chatListItem'] as ChatListItem?;
 
           // Use chat details if available, otherwise use chat list item
           if (_chat != null) {
-            _userName = _chat!.getPartnerUsername(1) ??
-                'Unknown User'; // Assuming current user ID is 1
-            _userImage = null; // You can add avatar to Chat model if needed
-            _isOnline =
-                false; // You can add online status to Chat model if needed
-            _isVerified =
-                false; // You can add verified status to Chat model if needed
+            _userName = _chat!.name ?? 'Unknown User';
+            _userImage = null;
+            _isOnline = _chat!.partner?.status == 'online';
+            _isVerified = false;
           } else if (chatListItem != null) {
             _userName = chatListItem.name;
             _userImage = chatListItem.avatar;
-            _isOnline = chatListItem.isOnline;
-            _isVerified =
-                false; // You can add verified status to ChatListItem if needed
+            _isOnline = _chat!.partner?.status == 'online';
+            _isVerified = false;
           } else {
-            // Fallback to navigation data
             _userName = navigationData['userName'] as String? ?? 'Ahmad';
             _userImage = navigationData['userImage'] as String?;
-            _isOnline = navigationData['isOnline'] as bool? ?? false;
+            _isOnline = false;
             _isVerified = navigationData['isVerified'] as bool? ?? false;
           }
 
@@ -171,6 +104,8 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
             await _loadPreviousMessages();
             await _connectToWebSocket();
           }
+        } else {
+          routeToAuthenticatedRoute();
         }
       };
 
@@ -184,28 +119,70 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
       _wsSubscription = WebSocketService().messageStream.listen((messageData) {
         _handleIncomingMessage(messageData);
       });
+      _notificationSubscription =
+          WebSocketService().notificationStream.listen((notificationData) {
+        _handleIncomingNotification(notificationData);
+      });
+    }
+  }
+
+  // Handle incoming notifications
+  Future<void> _handleIncomingNotification(
+      Map<String, dynamic> notificationData) async {
+    print('Handling incoming notification: $notificationData');
+    final userData = await Auth.data();
+
+    if (notificationData['action'] == 'user:disconnected') {
+      // Handle chat update notifications
+      if (_chat != null && _chat!.partner != null) {
+        if (notificationData['userId'] == _chat!.partner!.id) {
+          setState(() {
+            _isOnline = false;
+          });
+        }
+      }
+    } else if (notificationData['action'] == 'user:connected') {
+      // Handle user connected notification
+      if (_chat != null && _chat!.partner != null) {
+        if (notificationData['userId'] == _chat!.partner!.id) {
+          setState(() {
+            _isOnline = true;
+          });
+        }
+      }
+    } else if (notificationData['action'] == 'typing:start') {
+      if (notificationData['chatId'] == _chat?.id &&
+          notificationData['userId'] != userData?['id']) {
+        final newTypingUsers = _typingUsers.toSet();
+        newTypingUsers.add(notificationData['userId']);
+
+        setState(() {
+          _typingUsers = newTypingUsers;
+        });
+      }
+    } else if (notificationData['action'] == 'typing:stop' &&
+        notificationData['userId'] != userData?['id']) {
+      if (notificationData['chatId'] == _chat?.id) {
+        final newTypingUsers = _typingUsers.toSet();
+        newTypingUsers.remove(notificationData['userId']);
+        setState(() {
+          _typingUsers = newTypingUsers;
+        });
+      }
     }
   }
 
   Future<void> _loadPreviousMessages() async {
     if (_chat != null) {
       try {
-        final previousMessages =
-            await apiService.getChatMessages(chatId: _chat!.id);
-        if (previousMessages != null) {
+        // final previousMessages = _chat.messages;
+        // await apiService.getChatMessages(chatId: _chat!.id);
+        if (_chat != null) {
           setState(() {
             // Convert API messages to Message objects
-            messages = previousMessages
-                .map((msg) => Message(
-                      text: msg['content'] ?? '',
-                      time:
-                          _formatMessageTime(DateTime.parse(msg['createdAt'])),
-                      isSent:
-                          msg['senderId'] == 1, // Assuming current user ID is 1
-                      isDelivered: true,
-                    ))
-                .toList();
+            messages = _chat!.messages;
           });
+          // messages = _chat!.messages;
         }
       } catch (e) {
         print('Error loading previous messages: $e');
@@ -220,29 +197,42 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
   // Handle incoming WebSocket messages
   void _handleIncomingMessage(Map<String, dynamic> messageData) {
     // This runs on the main thread and won't block UI
+    print('Handling incoming message: $messageData');
+
     setState(() {
-      messages.add(Message(
-        text: messageData['content'] ?? 'Unknown message',
-        time: DateTime.now().toString().substring(11, 16), // HH:MM format
-        isSent: false, // Incoming message
-        isDelivered: true,
-      ));
+      final action = messageData['action'];
+
+      if (action != null && action == 'delete') {
+        final index = messages.indexWhere((msg) => msg.id == messageData['id']);
+        // Remove message if action is delete
+        print("Message deleted: ${messageData['id']}");
+        print("Removing message at index: $index");
+        if (index != -1) {
+          messages.removeAt(index);
+        }
+      } else {
+        Message newMessage = Message.fromJson(messageData);
+        final index = messages.indexWhere((msg) => msg.id == newMessage.id);
+
+        if (index != -1) {
+          messages[index] = newMessage;
+        } else {
+          messages.add(newMessage);
+        }
+      }
     });
 
     _scrollToBottom();
-    print('Received message: ${messageData['content']}');
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    print("initState called"); // Debug
-    _messageController.addListener(_onTextChanged);
   }
 
   void _onTextChanged() {
     bool hasText = _messageController.text.trim().isNotEmpty;
+
     if (hasText != _hasText) {
+      WebSocketService().sendTypingIndicator(
+        hasText,
+        _chat!.id,
+      );
       setState(() {
         _hasText = hasText;
       });
@@ -257,56 +247,77 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
 
     // Clean up WebSocket resources
     _wsSubscription?.cancel();
+    _notificationSubscription?.cancel();
     WebSocketService().disconnect();
 
     super.dispose();
   }
 
+  Future<void> _pickFileOnWeb() async {
+    FilePickerResult? result =
+        await FilePicker.platform.pickFiles(type: FileType.image);
+
+    if (result != null) {
+      Uint8List? fileBytes = result.files.first.bytes;
+      String fileName = result.files.first.name;
+      print(fileName);
+      // Use fileBytes or fileName as needed
+    }
+    // Implement file picking for web
+  }
+
   void _toggleMediaPicker() {
-    setState(() {
-      _showMediaPicker = !_showMediaPicker;
-    });
+    if (kIsWeb) {
+      _pickFileOnWeb();
+      setState(() {
+        _showMediaPicker = false;
+      });
+    } else {
+      setState(() {
+        _showMediaPicker = !_showMediaPicker;
+      });
+    }
   }
 
   void _sendMessage() async {
     if (_messageController.text.trim().isNotEmpty) {
       final messageText = _messageController.text.trim();
-
+      print("Sending message: $messageText");
       // Add message to UI immediately for better UX
-      setState(() {
-        messages.add(Message(
-          text: messageText,
-          time:
-              "${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')}",
-          isSent: true,
-          isDelivered: false,
-        ));
-      });
+      // setState(() {
+      //   messages.add(Message(
+      //     text: messageText,
+      //     time:
+      //         "${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')}",
+      //     isSent: true,
+      //     isDelivered: false,
+      //   ));
+      // });
 
       _messageController.clear();
       _scrollToBottom();
 
       // Send via WebSocket if connected (real-time)
       if (_isWebSocketConnected) {
-        WebSocketService().sendMessage(messageText);
+        WebSocketService().sendMessage(messageText, _chat!.id);
         print('Message sent via WebSocket');
 
         // Update as delivered after a short delay
-        Future.delayed(const Duration(milliseconds: 500), () {
-          setState(() {
-            if (messages.isNotEmpty) {
-              final lastMessage = messages.last;
-              messages[messages.length - 1] = Message(
-                text: lastMessage.text,
-                time: lastMessage.time,
-                isSent: true,
-                isDelivered: true,
-                isAudio: lastMessage.isAudio,
-                audioDuration: lastMessage.audioDuration,
-              );
-            }
-          });
-        });
+        // Future.delayed(const Duration(milliseconds: 500), () {
+        //   setState(() {
+        //     if (messages.isNotEmpty) {
+        //       final lastMessage = messages.last;
+        //       messages[messages.length - 1] = Message(
+        //         text: lastMessage.text,
+        //         time: lastMessage.time,
+        //         isSent: true,
+        //         isDelivered: true,
+        //         isAudio: lastMessage.isAudio,
+        //         audioDuration: lastMessage.audioDuration,
+        //       );
+        //     }
+        //   });
+        // });
       }
       // Fallback to API if WebSocket not connected
       else if (_chat != null) {
@@ -319,19 +330,19 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
           if (result != null) {
             print('Message sent via API');
             // Update the last message as delivered
-            setState(() {
-              if (messages.isNotEmpty) {
-                final lastMessage = messages.last;
-                messages[messages.length - 1] = Message(
-                  text: lastMessage.text,
-                  time: lastMessage.time,
-                  isSent: true,
-                  isDelivered: true,
-                  isAudio: lastMessage.isAudio,
-                  audioDuration: lastMessage.audioDuration,
-                );
-              }
-            });
+            // setState(() {
+            //   if (messages.isNotEmpty) {
+            //     final lastMessage = messages.last;
+            //     messages[messages.length - 1] = Message(
+            //       text: lastMessage.text,
+            //       time: lastMessage.time,
+            //       isSent: true,
+            //       isDelivered: true,
+            //       isAudio: lastMessage.isAudio,
+            //       audioDuration: lastMessage.audioDuration,
+            //     );
+            //   }
+            // });
           }
         } catch (e) {
           print('Error sending message via API: $e');
@@ -393,7 +404,9 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
                               ),
                             ),
                           ),
-                          onPressed: () => Navigator.pop(context),
+                          // TODO: Change chack to Navigator.pop
+                          // onPressed: () => Navigator.pop(context),
+                          onPressed: () => routeToAuthenticatedRoute(),
                         ),
                         Container(
                           width: 32,
@@ -437,23 +450,28 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
                                 mainAxisAlignment: MainAxisAlignment
                                     .center, // This centers the row content
                                 children: [
-                                  Container(
-                                    width: 4,
-                                    height: 4,
-                                    decoration: BoxDecoration(
-                                      color: _isOnline
-                                          ? const Color(0xFF2ECC71)
-                                          : Colors.grey.shade500,
-                                      shape: BoxShape.circle,
+                                  if (_typingUsers.isEmpty)
+                                    Container(
+                                      width: 4,
+                                      height: 4,
+                                      decoration: BoxDecoration(
+                                        color: _isOnline
+                                            ? const Color(0xFF2ECC71)
+                                            : Colors.grey.shade500,
+                                        shape: BoxShape.circle,
+                                      ),
                                     ),
-                                  ),
                                   const SizedBox(width: 4),
                                   Text(
-                                    _isOnline ? 'Online' : 'Offline',
+                                    _typingUsers.isNotEmpty
+                                        ? 'Typing...'
+                                        : (_isOnline ? 'Online' : 'Offline'),
                                     style: TextStyle(
-                                      color: _isOnline
-                                          ? const Color(0xFF2ECC71)
-                                          : Colors.grey.shade500,
+                                      color: _typingUsers.isNotEmpty
+                                          ? const Color(0xFF3498DB)
+                                          : (_isOnline
+                                              ? const Color(0xFF2ECC71)
+                                              : Colors.grey.shade500),
                                       fontSize: 8,
                                     ),
                                   ),
@@ -727,14 +745,16 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
   }
 
   Widget _buildMessage(Message message) {
+    // Determine if this message was sent by the current user
+    final bool isSentByMe =
+        _currentUserId != null && message.senderId == _currentUserId;
     return Container(
-      // margin: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
       margin: const EdgeInsets.fromLTRB(2, 0, 2, 4),
       child: Row(
         mainAxisAlignment:
-            message.isSent ? MainAxisAlignment.end : MainAxisAlignment.start,
+            isSentByMe ? MainAxisAlignment.end : MainAxisAlignment.start,
         children: [
-          if (!message.isSent) const SizedBox(width: 10),
+          if (!isSentByMe) const SizedBox(width: 10),
           Flexible(
             child: Container(
               constraints: BoxConstraints(
@@ -742,10 +762,10 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
               ),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: message.isSent
+                color: isSentByMe
                     ? const Color(0xFF3498DB)
                     : const Color(0xFF404040),
-                borderRadius: message.isSent
+                borderRadius: isSentByMe
                     ? const BorderRadius.only(
                         topLeft: Radius.circular(18),
                         topRight: Radius.circular(18),
@@ -782,7 +802,9 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
                     )
                   else
                     Text(
-                      message.text,
+                      message.type == "TEXT"
+                          ? (message.text ?? '')
+                          : (message.caption ?? ''),
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 16,
@@ -793,13 +815,13 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        message.time,
+                        message.createdAt.toIso8601String().substring(11, 16),
                         style: TextStyle(
                           color: Colors.white.withOpacity(0.7),
                           fontSize: 12,
                         ),
                       ),
-                      if (message.isSent) ...[
+                      if (isSentByMe) ...[
                         const SizedBox(width: 4),
                         Icon(
                           message.isDelivered ? Icons.done_all : Icons.done,
@@ -815,7 +837,7 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
               ),
             ),
           ),
-          if (message.isSent) const SizedBox(width: 10),
+          if (isSentByMe) const SizedBox(width: 10),
         ],
       ),
     );
@@ -903,7 +925,7 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
                   Row(
                     children: [
                       Text(
-                        message.time,
+                        message.createdAt.toIso8601String().substring(11, 16),
                         style: TextStyle(
                           color: Color(0xFFE8E7EA).withOpacity(0.7),
                           fontSize: 14,
@@ -1167,19 +1189,30 @@ class _GalleryContentState extends State<_GalleryContent> {
 
     try {
       // Request photo library permission
-      final permission = await Permission.photos.request();
+      if (kIsWeb) {
+        FilePickerResult? result =
+            await FilePicker.platform.pickFiles(type: FileType.image);
 
-      if (permission.isGranted) {
-        setState(() {
-          _hasPermission = true;
-        });
-        await _loadGalleryImages();
+        if (result != null) {
+          Uint8List? fileBytes = result.files.first.bytes;
+          String fileName = result.files.first.name;
+          print(fileName);
+          // Use fileBytes or fileName as needed
+        }
       } else {
-        setState(() {
-          _hasPermission = false;
-          _isLoading = false;
-        });
-        print('Photo library permission denied');
+        final permission = await Permission.photos.request();
+        if (permission.isGranted) {
+          setState(() {
+            _hasPermission = true;
+          });
+          await _loadGalleryImages();
+        } else {
+          setState(() {
+            _hasPermission = false;
+            _isLoading = false;
+          });
+          print('Photo library permission denied');
+        }
       }
     } catch (e) {
       print('Error requesting permission: $e');
@@ -1728,22 +1761,4 @@ class _ContactContent extends StatelessWidget {
       },
     );
   }
-}
-
-class Message {
-  final String text;
-  final String time;
-  final bool isSent;
-  final bool isDelivered;
-  final bool isAudio;
-  final String? audioDuration;
-
-  Message({
-    required this.text,
-    required this.time,
-    required this.isSent,
-    this.isDelivered = false,
-    this.isAudio = false,
-    this.audioDuration,
-  });
 }
