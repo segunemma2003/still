@@ -225,15 +225,8 @@ class WebSocketService {
 
   /// Send a message to the current chat
   Future<void> sendMessage(String message, int chatId) async {
-    print('🚀 === SENDMESSAGE METHOD CALLED ===');
-    print('🔍 === MESSAGE SEND DEBUG ===');
-    print('🔍 WebSocket connected: $_isConnected');
-    print('🔍 Socket exists: ${_socket != null}');
-    print('🔍 Current chat ID: $_currentChatId');
-    print('🔍 Target chat ID: $chatId');
-
     if (!_isConnected || _socket == null) {
-      print('❌ Socket.IO not connected');
+      print('Socket.IO not connected');
       return;
     }
 
@@ -244,41 +237,15 @@ class WebSocketService {
         'chatId': chatId,
       };
 
-      print('📤 WebSocket sending message: $messageData');
-      print('📤 Event: message:send');
-      print('📤 Socket state: ${_socket!.connected}');
-      print('📤 Timestamp: ${DateTime.now().toIso8601String()}');
-
-      print('🚀 ===== EMITTING EVENT: message:send =====');
-      print('🚀 Event: message:send');
-      print('🚀 Data: $messageData');
-
-      // Send with acknowledgment for Socket.IO
-      _socket!.emitWithAck('message:send', messageData, ack: (data) {
-        print('✅ Server acknowledged message:send: $data');
-      });
-
-      print('✅ ===== EVENT SENT: message:send =====');
-      print('✅ Message sent via WebSocket: $message');
-
-      // Send message using the correct event name: message:send
-      print('✅ Using correct event: message:send');
-
-      // Add listeners for various response events
-      _socket!.once('message:sent', (data) {
-        print('✅ Server confirmed message sent: $data');
-      });
-
-      _socket!.once('message:error', (data) {
-        print('❌ Server returned message error: $data');
-      });
-
-      _socket!.once('error', (data) {
-        print('❌ General WebSocket error: $data');
-      });
+      print('Sending message: $messageData');
+      final jsonString = jsonEncode(messageData);
+      _socket!.emit('message:send', jsonString);
+      _socket!.emit(
+        'message:send',
+      );
+      print('Message sent: $message');
     } catch (e) {
-      print('❌ Error sending message: $e');
-      print('❌ Error stack trace: ${e.toString()}');
+      print('Error sending message: $e');
     }
   }
 

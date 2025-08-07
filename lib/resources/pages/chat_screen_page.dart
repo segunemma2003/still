@@ -375,8 +375,22 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
         final index = messages.indexWhere((msg) => msg.id == newMessage.id);
 
         if (index != -1) {
+          // Update existing message
           messages[index] = newMessage;
+          print(
+              '✅ Message updated in chat. Total messages: ${messages.length}');
         } else {
+          // Check if this is a message from current user that we already added locally
+          final isFromCurrentUser = newMessage.senderId == _currentUserId;
+          final hasRecentMessage = messages.isNotEmpty &&
+              messages.last.senderId == _currentUserId &&
+              messages.last.text == newMessage.text;
+
+          if (isFromCurrentUser && hasRecentMessage) {
+            print('🔄 Ignoring duplicate message from current user');
+            return;
+          }
+
           messages.add(newMessage);
           print(
               '✅ Message added to current chat. Total messages: ${messages.length}');
@@ -573,11 +587,6 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
             print('❌ WebSocket still not connected after retry');
           }
         });
-
-        // Also try sending immediately in case connection status is wrong
-        print(
-            '🚀 Attempting immediate send regardless of connection status...');
-        WebSocketService().sendMessage(messageText, _chat!.id);
       }
     }
   }
