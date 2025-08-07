@@ -8,6 +8,11 @@ class ContactInfo extends Model {
   String? imagePath;
   String? tagIndex;
   bool? isShowSuspension;
+  String? phoneNumber;
+  String? contactId;
+  bool? isRegisteredOnPlatform;
+  String? platformUsername;
+  String? platformUserId;
 
   ContactInfo(
       {required String name,
@@ -20,6 +25,11 @@ class ContactInfo extends Model {
     imagePath = data['imagePath'];
     tagIndex = data['tagIndex'];
     isShowSuspension = data['isShowSuspension'] ?? false;
+    phoneNumber = data['phoneNumber'];
+    contactId = data['contactId'];
+    isRegisteredOnPlatform = data['isRegisteredOnPlatform'] ?? false;
+    platformUsername = data['platformUsername'];
+    platformUserId = data['platformUserId'];
   }
 
   ContactInfo.create({
@@ -27,6 +37,11 @@ class ContactInfo extends Model {
     required this.imagePath,
     required this.tagIndex,
     this.isShowSuspension = false,
+    this.phoneNumber,
+    this.contactId,
+    this.isRegisteredOnPlatform = false,
+    this.platformUsername,
+    this.platformUserId,
   }) : super(key: key);
 
   @override
@@ -36,6 +51,11 @@ class ContactInfo extends Model {
       'imagePath': imagePath,
       'tagIndex': tagIndex,
       'isShowSuspension': isShowSuspension,
+      'phoneNumber': phoneNumber,
+      'contactId': contactId,
+      'isRegisteredOnPlatform': isRegisteredOnPlatform,
+      'platformUsername': platformUsername,
+      'platformUserId': platformUserId,
     };
   }
 }

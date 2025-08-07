@@ -13,6 +13,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:nylo_framework/nylo_framework.dart';
 import '/app/models/chat.dart';
 import '/app/models/chat_list_item.dart';
+import '/app/models/chat_partner.dart';
 import '/app/networking/chat_api_service.dart';
 import '/app/networking/websocket_service.dart';
 import '/resources/pages/video_call_page.dart';
@@ -71,14 +72,64 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
         // Retrieve chat data from navigation
         final navigationData = data();
         if (navigationData != null) {
+          print('=== NAVIGATION DATA DEBUG ===');
+          print('Full navigation data: $navigationData');
+          print('Keys: ${navigationData.keys.toList()}');
+
           _chat = navigationData['chat'] as Chat?;
           print('Chat data from navigation: $_chat');
+          print('Chat creation data: ${navigationData['chatData']}');
+          print('Chat ID from navigation: ${navigationData['chatId']}');
+          print('Partner ID from navigation: ${navigationData['partnerId']}');
+          print(
+              'Partner username from navigation: ${navigationData['partnerUsername']}');
           print(
               'Chat list item from navigation: ${navigationData['chatListItem']}');
           final chatListItem = navigationData['chatListItem'] as ChatListItem?;
 
-          // Use chat details if available, otherwise use chat list item
-          if (_chat != null) {
+          // Handle new chat creation data
+          if (navigationData['chatData'] != null) {
+            // Create chat object from chat creation response
+            final chatData = navigationData['chatData'];
+            _chat = Chat(
+              id: chatData.id,
+              creatorId: chatData.creatorId,
+              name: chatData.name,
+              type: chatData.type,
+              isPublic: chatData.isPublic,
+              inviteCode: chatData.inviteCode,
+              createdAt: DateTime.parse(chatData.createdAt),
+              updatedAt: DateTime.parse(chatData.updatedAt),
+              partner: chatData.partner != null
+                  ? Partner(
+                      id: chatData.partner!['id'],
+                      username: chatData.partner!['username'],
+                      firstName: chatData.partner!['firstName'],
+                      lastName: chatData.partner!['lastName'],
+                      status: chatData.partner!['status'],
+                    )
+                  : null,
+              messages: chatData.messages != null
+                  ? (chatData.messages! as List<dynamic>)
+                      .map((msg) =>
+                          Message.fromJson(msg as Map<String, dynamic>))
+                      .toList()
+                  : [],
+              users: [], // Empty users list for now
+            );
+
+            // Set user info from chat data
+            _userName = chatData.partnerUsername ??
+                navigationData['userName'] as String? ??
+                'Unknown User';
+            _userImage = navigationData['userImage'] as String?;
+            _isOnline = chatData.partnerStatus == 'online';
+            _isVerified = navigationData['isVerified'] as bool? ?? false;
+
+            print('Created chat from chatData: ${_chat?.id}');
+          }
+          // Use existing chat details if available
+          else if (_chat != null) {
             _userName = _chat!.name ?? 'Unknown User';
             _userImage = null;
             _isOnline = _chat!.partner?.status == 'online';
@@ -93,6 +144,34 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
             _userImage = navigationData['userImage'] as String?;
             _isOnline = false;
             _isVerified = navigationData['isVerified'] as bool? ?? false;
+
+            // Create a fallback chat object if we have basic info but no chat data
+            if (navigationData['chatId'] != null ||
+                navigationData['partnerId'] != null) {
+              _chat = Chat(
+                id: navigationData['chatId'] ?? 0,
+                creatorId: _currentUserId ?? 0,
+                name: _userName,
+                type: 'PRIVATE',
+                isPublic: false,
+                inviteCode: null,
+                createdAt: DateTime.now(),
+                updatedAt: DateTime.now(),
+                partner: navigationData['partnerId'] != null
+                    ? Partner(
+                        id: navigationData['partnerId'],
+                        username:
+                            navigationData['partnerUsername'] ?? _userName,
+                        firstName: null,
+                        lastName: null,
+                        status: 'offline',
+                      )
+                    : null,
+                messages: [],
+                users: [],
+              );
+              print('Created fallback chat with ID: ${_chat?.id}');
+            }
           }
 
           print('Chat data loaded: ${_chat?.id}');
@@ -101,7 +180,9 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
 
           // Load previous messages if we have a chat
           if (_chat != null) {
+            print('🔄 Starting to load previous messages...');
             await _loadPreviousMessages();
+            print('🔄 Previous messages loaded, connecting to WebSocket...');
             await _connectToWebSocket();
           }
         } else {
@@ -112,17 +193,52 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
   // Connect to WebSocket
   Future<void> _connectToWebSocket() async {
     if (_chat != null) {
-      await WebSocketService().connectToChat(chatId: _chat!.id.toString());
-      _isWebSocketConnected = WebSocketService().isConnected;
+      try {
+        // First initialize the connection if not already connected
+        if (!WebSocketService().isConnected) {
+          await WebSocketService().initializeConnection();
+        }
 
-      // Listen for incoming messages
-      _wsSubscription = WebSocketService().messageStream.listen((messageData) {
-        _handleIncomingMessage(messageData);
-      });
-      _notificationSubscription =
-          WebSocketService().notificationStream.listen((notificationData) {
-        _handleIncomingNotification(notificationData);
-      });
+        // Then connect to specific chat
+        await WebSocketService().connectToChat(chatId: _chat!.id.toString());
+        _isWebSocketConnected = WebSocketService().isConnected;
+
+        print('WebSocket connected: $_isWebSocketConnected');
+
+        // Listen for incoming messages
+        _wsSubscription =
+            WebSocketService().messageStream.listen((messageData) {
+          print('📨 Message stream received: $messageData');
+          print('📍 Current chat ID: ${_chat?.id}');
+          _handleIncomingMessage(messageData);
+        });
+        _notificationSubscription =
+            WebSocketService().notificationStream.listen((notificationData) {
+          _handleIncomingNotification(notificationData);
+        });
+
+        // Listen for connection status changes
+        WebSocketService().connectionStatusStream.listen((isConnected) {
+          if (mounted) {
+            setState(() {
+              _isWebSocketConnected = isConnected;
+            });
+          }
+          print('WebSocket connection status changed: $isConnected');
+
+          // If WebSocket just connected, try sending any pending messages
+          if (isConnected && messages.isNotEmpty) {
+            final lastMessage = messages.last;
+            if (lastMessage.senderId == _currentUserId) {
+              print('🔄 WebSocket connected, retrying last message send...');
+              WebSocketService().sendMessage(lastMessage.text ?? '', _chat!.id);
+            }
+          }
+        });
+      } catch (e) {
+        print('Error connecting to WebSocket: $e');
+        _isWebSocketConnected = false;
+      }
     }
   }
 
@@ -131,6 +247,8 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
       Map<String, dynamic> notificationData) async {
     print('Handling incoming notification: $notificationData');
     final userData = await Auth.data();
+
+    if (!mounted) return; // Don't update state if widget is disposed
 
     if (notificationData['action'] == 'user:disconnected') {
       // Handle chat update notifications
@@ -175,17 +293,46 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
   Future<void> _loadPreviousMessages() async {
     if (_chat != null) {
       try {
-        // final previousMessages = _chat.messages;
-        // await apiService.getChatMessages(chatId: _chat!.id);
-        if (_chat != null) {
+        print('🔍 Loading previous messages for chat ID: ${_chat!.id}');
+
+        // Load chat with messages using the /chat endpoint
+        final chatData = await apiService.getChatWithMessages(
+          type: 'PRIVATE',
+          partnerId: _chat!.partner?.id.toString(),
+        );
+
+        if (chatData != null && chatData.messages != null) {
+          print('✅ Found ${chatData.messages!.length} previous messages');
+
           setState(() {
             // Convert API messages to Message objects
-            messages = _chat!.messages;
+            messages =
+                chatData.messages!.map((msg) => Message.fromJson(msg)).toList();
           });
-          // messages = _chat!.messages;
+
+          print('✅ Loaded ${messages.length} messages into chat');
+
+          // Scroll to bottom to show latest messages
+          _scrollToBottom();
+        } else {
+          print('⚠️ No previous messages found or invalid response');
+          // Use existing messages if available
+          if (_chat!.messages.isNotEmpty) {
+            setState(() {
+              messages = _chat!.messages;
+            });
+            print('✅ Using existing messages: ${messages.length} messages');
+          }
         }
       } catch (e) {
-        print('Error loading previous messages: $e');
+        print('❌ Error loading previous messages: $e');
+        // Fallback to existing messages
+        if (_chat!.messages.isNotEmpty) {
+          setState(() {
+            messages = _chat!.messages;
+          });
+          print('✅ Fallback to existing messages: ${messages.length} messages');
+        }
       }
     }
   }
@@ -198,6 +345,19 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
   void _handleIncomingMessage(Map<String, dynamic> messageData) {
     // This runs on the main thread and won't block UI
     print('Handling incoming message: $messageData');
+
+    if (!mounted) return; // Don't update state if widget is disposed
+
+    // Check if this message belongs to the current chat
+    final messageChatId = messageData['chatId'];
+    final currentChatId = _chat?.id;
+
+    print('Message chat ID: $messageChatId, Current chat ID: $currentChatId');
+
+    if (messageChatId != currentChatId) {
+      print('❌ Message not for current chat, ignoring');
+      return;
+    }
 
     setState(() {
       final action = messageData['action'];
@@ -218,6 +378,8 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
           messages[index] = newMessage;
         } else {
           messages.add(newMessage);
+          print(
+              '✅ Message added to current chat. Total messages: ${messages.length}');
         }
       }
     });
@@ -229,10 +391,20 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
     bool hasText = _messageController.text.trim().isNotEmpty;
 
     if (hasText != _hasText) {
-      WebSocketService().sendTypingIndicator(
-        hasText,
-        _chat!.id,
-      );
+      print('Text changed: hasText=$hasText, _hasText=$_hasText'); // Debug
+
+      // Only send typing indicator if chat is available and WebSocket is connected
+      if (_chat != null && _isWebSocketConnected) {
+        try {
+          WebSocketService().sendTypingIndicator(
+            hasText,
+            _chat!.id,
+          );
+        } catch (e) {
+          print('Error sending typing indicator: $e');
+        }
+      }
+
       setState(() {
         _hasText = hasText;
       });
@@ -245,10 +417,10 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
     _messageController.dispose();
     _scrollController.dispose();
 
-    // Clean up WebSocket resources
+    // Clean up WebSocket subscriptions but keep the service running
+    // as it might be used by other screens
     _wsSubscription?.cancel();
     _notificationSubscription?.cancel();
-    WebSocketService().disconnect();
 
     super.dispose();
   }
@@ -283,24 +455,65 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
     if (_messageController.text.trim().isNotEmpty) {
       final messageText = _messageController.text.trim();
       print("Sending message: $messageText");
+      print("WebSocket connected: $_isWebSocketConnected");
+      print("Chat ID: ${_chat?.id}");
+
       // Add message to UI immediately for better UX
-      // setState(() {
-      //   messages.add(Message(
-      //     text: messageText,
-      //     time:
-      //         "${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')}",
-      //     isSent: true,
-      //     isDelivered: false,
-      //   ));
-      // });
+      setState(() {
+        final now = DateTime.now();
+        final newMessage = Message(
+          id: DateTime.now().millisecondsSinceEpoch, // Temporary ID
+          senderId: _currentUserId ?? 0,
+          chatId: _chat?.id ?? 0,
+          type: 'TEXT',
+          text: messageText,
+          caption: null,
+          fileId: null,
+          createdAt: now,
+          updatedAt: now,
+          sender: Sender(
+            id: _currentUserId ?? 0,
+            username: 'You',
+            firstName: null,
+            lastName: null,
+          ),
+          isSent: true,
+          isDelivered: false,
+          isAudio: false,
+          audioDuration: null,
+        );
+        messages.add(newMessage);
+        print('✅ Message added to list. Total messages: ${messages.length}');
+        print('Message text: "${newMessage.text}"');
+      });
 
       _messageController.clear();
       _scrollToBottom();
 
       // Send via WebSocket if connected (real-time)
-      if (_isWebSocketConnected) {
+      print('🔍 Checking WebSocket connection status...');
+      print('🔍 Local _isWebSocketConnected: $_isWebSocketConnected');
+      print(
+          '🔍 WebSocketService().isConnected: ${WebSocketService().isConnected}');
+      print(
+          '🔍 WebSocketService().currentChatId: ${WebSocketService().currentChatId}');
+      print('🔍 Current chat ID: ${_chat?.id}');
+
+      final shouldSendViaWebSocket =
+          _isWebSocketConnected || WebSocketService().isConnected;
+      print('🔍 Should send via WebSocket: $shouldSendViaWebSocket');
+
+      if (shouldSendViaWebSocket) {
+        print('🚀 === SEND MESSAGE TRIGGERED ===');
+        print('📤 Sending message to chat ID: ${_chat!.id}');
+        print(
+            '📤 WebSocket connected to chat: ${WebSocketService().currentChatId}');
+        print('📤 Message text: "$messageText"');
+        print('📤 Timestamp: ${DateTime.now().toIso8601String()}');
+
+        // Call the sendMessage function
         WebSocketService().sendMessage(messageText, _chat!.id);
-        print('Message sent via WebSocket');
+        print('✅ SendMessage method called');
 
         // Update as delivered after a short delay
         // Future.delayed(const Duration(milliseconds: 500), () {
@@ -348,14 +561,30 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
           print('Error sending message via API: $e');
         }
       } else {
-        print('No WebSocket connection or chat available');
+        print(
+            '⚠️ No WebSocket connection available, will retry in 1 second...');
+
+        // Retry sending after a short delay in case WebSocket connects
+        Future.delayed(const Duration(seconds: 1), () {
+          if (WebSocketService().isConnected && mounted) {
+            print('🔄 Retrying message send after WebSocket connection...');
+            WebSocketService().sendMessage(messageText, _chat!.id);
+          } else {
+            print('❌ WebSocket still not connected after retry');
+          }
+        });
+
+        // Also try sending immediately in case connection status is wrong
+        print(
+            '🚀 Attempting immediate send regardless of connection status...');
+        WebSocketService().sendMessage(messageText, _chat!.id);
       }
     }
   }
 
   void _scrollToBottom() {
     Future.delayed(const Duration(milliseconds: 100), () {
-      if (_scrollController.hasClients) {
+      if (mounted && _scrollController.hasClients) {
         _scrollController.animateTo(
           _scrollController.position.maxScrollExtent,
           duration: const Duration(milliseconds: 300),
@@ -530,15 +759,31 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
                 child: Stack(
                   children: [
                     // Messages with padding for floating header
-                    Padding(
-                      padding: const EdgeInsets.only(
-                          top: 0), // Space for floating "Today"
-                      child: ListView.builder(
-                        controller: _scrollController,
-                        itemCount: messages.length,
-                        itemBuilder: (context, index) {
-                          return _buildMessage(messages[index]);
-                        },
+                    GestureDetector(
+                      onTap: () {
+                        // Dismiss keyboard when tapping outside input
+                        FocusScope.of(context).unfocus();
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.only(
+                            top: 0,
+                            bottom:
+                                100), // Space for floating "Today" and input area
+                        child: RefreshIndicator(
+                          onRefresh: () async {
+                            print('🔄 Pull to refresh triggered');
+                            await _loadPreviousMessages();
+                          },
+                          child: ListView.builder(
+                            controller: _scrollController,
+                            itemCount: messages.length,
+                            itemBuilder: (context, index) {
+                              print(
+                                  'Building message ${index + 1}/${messages.length}: ${messages[index].text}');
+                              return _buildMessage(messages[index]);
+                            },
+                          ),
+                        ),
                       ),
                     ),
 
@@ -748,8 +993,13 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
     // Determine if this message was sent by the current user
     final bool isSentByMe =
         _currentUserId != null && message.senderId == _currentUserId;
+
+    // Check if this is the last message to add extra bottom spacing
+    final bool isLastMessage = messages.isNotEmpty && messages.last == message;
+
     return Container(
-      margin: const EdgeInsets.fromLTRB(2, 0, 2, 4),
+      margin: EdgeInsets.fromLTRB(2, 0, 2,
+          isLastMessage ? 20 : 4), // Extra bottom margin for last message
       child: Row(
         mainAxisAlignment:
             isSentByMe ? MainAxisAlignment.end : MainAxisAlignment.start,

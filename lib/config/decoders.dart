@@ -4,6 +4,7 @@ import '/app/models/chat_list_item.dart';
 import '/app/models/user.dart';
 import '/app/models/chat_list_response.dart';
 import '/app/models/search_char_response.dart';
+import '/app/models/chat_creation_response.dart';
 import '/app/networking/api_service.dart';
 import '/app/networking/auth_api_service.dart';
 import '/app/networking/chat_api_service.dart';
@@ -30,6 +31,7 @@ final Map<Type, dynamic> modelDecoders = {
   SearchUser: (data) => SearchUser.fromJson(data),
   List<SearchUser>: (data) =>
       List.from(data).map((json) => SearchUser.fromJson(json)).toList(),
+  ChatCreationResponse: (data) => ChatCreationResponse.fromJson(data),
   // To handle nullable lists, decode as List<SearchUser> and handle nulls outside the decoder.
   // SearchCharResponse: (data) => SearchCharResponse.fromJson(data),
 };

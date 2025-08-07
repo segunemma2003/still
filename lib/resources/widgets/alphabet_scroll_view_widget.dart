@@ -8,11 +8,13 @@ import '../../app/models/contact_info.dart';
 class AlphabetScrollView extends StatefulWidget {
   final List<ContactInfo> contactList;
   final Function(ContactInfo)? onContactTap;
+  final Function(ContactInfo)? onInviteTap;
 
   const AlphabetScrollView({
     super.key,
     required this.contactList,
     this.onContactTap,
+    this.onInviteTap,
   });
 
   @override
@@ -102,7 +104,9 @@ class _AlphabetScrollViewState extends NyState<AlphabetScrollView> {
   Widget _buildContactItem(ContactInfo contact) {
     return GestureDetector(
       onTap: () {
-        if (widget.onContactTap != null) {
+        // Only allow tap if contact is registered on platform
+        if (contact.isRegisteredOnPlatform == true &&
+            widget.onContactTap != null) {
           widget.onContactTap!(contact);
         }
       },
@@ -154,18 +158,62 @@ class _AlphabetScrollViewState extends NyState<AlphabetScrollView> {
                         ),
                 ),
                 const SizedBox(width: 16),
-                // Name
+                // Name and username
                 Expanded(
-                  child: Text(
-                    contact.name ?? 'Unknown',
-                    style: const TextStyle(
-                      color: Color(0xFFE8E7EA),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                    ),
-                    overflow: TextOverflow.ellipsis,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        contact.name ?? 'Unknown',
+                        style: TextStyle(
+                          color: contact.isRegisteredOnPlatform == true
+                              ? Color(0xFFE8E7EA)
+                              : Colors.grey.shade500,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (contact.isRegisteredOnPlatform == true &&
+                          contact.platformUsername != null)
+                        Text(
+                          '@${contact.platformUsername}',
+                          style: TextStyle(
+                            color: Color(0xFF57A1FF),
+                            fontSize: 10,
+                            fontWeight: FontWeight.w400,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                    ],
                   ),
                 ),
+                // Invite button for non-registered contacts
+                if (contact.isRegisteredOnPlatform != true)
+                  GestureDetector(
+                    onTap: () {
+                      if (widget.onInviteTap != null) {
+                        widget.onInviteTap!(contact);
+                      }
+                    },
+                    child: Container(
+                      padding:
+                          EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Color(0xFF57A1FF),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        'Invite',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),

@@ -47,11 +47,21 @@ class WebSocketService {
       String? accessToken = userData != null ? userData['accessToken'] : null;
 
       _socket = IO.io(getEnv('API_BASE_URL'), <String, dynamic>{
-        'transports': <String>['websocket'],
+        'transports': <String>[
+          'websocket',
+          'polling'
+        ], // Add polling as fallback
         'autoConnect': false,
         'auth': {
           'token': accessToken,
         },
+        'timeout': 20000, // 20 second timeout
+        'reconnection': true,
+        'reconnectionAttempts': 5,
+        'reconnectionDelay': 1000,
+        'forceNew': true, // Force new connection
+        'upgrade': true, // Allow transport upgrade
+        'rememberUpgrade': true, // Remember transport preference
       });
       _socket!.connect();
 
@@ -64,17 +74,40 @@ class WebSocketService {
         await _sendAuthMessage();
       });
 
-      _socket!.on('disconnect', (_) {
-        print('Socket.IO disconnected');
+      _socket!.on('disconnect', (reason) {
+        print('Socket.IO disconnected: $reason');
         _isConnected = false;
         _connectionStatusController.add(false);
-        // _handleDisconnection();
+        _handleDisconnection();
+      });
+
+      _socket!.on('connect_error', (error) {
+        print('Socket.IO connection error: $error');
+        _isConnected = false;
+        _connectionStatusController.add(false);
+        _handleError(error);
+      });
+
+      _socket!.on('reconnect', (attemptNumber) {
+        print('Socket.IO reconnected after $attemptNumber attempts');
+        _isConnected = true;
+        _connectionStatusController.add(true);
+        _reconnectAttempts = 0;
+      });
+
+      _socket!.on('reconnect_error', (error) {
+        print('Socket.IO reconnection error: $error');
+        _handleError(error);
       });
 
       _socket!.on('message',
           (data) => _handleIncomingMessage('message', jsonEncode(data)));
       _socket!.on('message:new',
           (data) => _handleIncomingMessage('message:new', jsonEncode(data)));
+      _socket!.on('new_message',
+          (data) => _handleIncomingMessage('new_message', jsonEncode(data)));
+      _socket!.on('chat_message',
+          (data) => _handleIncomingMessage('chat_message', jsonEncode(data)));
       _socket!.on('message:edit',
           (data) => _handleIncomingMessage('message:edit', jsonEncode(data)));
       _socket!.on('message:delete',
@@ -89,6 +122,14 @@ class WebSocketService {
           (data) => _handleIncomingMessage('typing', jsonEncode(data)));
       _socket!.on('read_receipt',
           (data) => _handleIncomingMessage('read_receipt', jsonEncode(data)));
+
+      // Catch-all listener for debugging
+      _socket!.onAny((event, data) {
+        print('🎯 Received ANY event: $event with data: $data');
+        if (event.startsWith('message') || event.contains('message')) {
+          _handleIncomingMessage(event, jsonEncode(data));
+        }
+      });
     } catch (e) {
       _isConnecting = false;
       _handleError(e);
@@ -109,8 +150,10 @@ class WebSocketService {
 
     try {
       _currentChatId = chatId;
-      // Optionally emit a join event to the server for the chat room
-      _socket?.emit('join_chat', {'chatId': chatId});
+      // Emit a join event to the server for the chat room with acknowledgment
+      _socket?.emitWithAck('join_chat', {'chatId': chatId}, ack: (data) {
+        print('✅ Server acknowledged join_chat: $data');
+      });
       _isConnected = true;
       _reconnectAttempts = 0;
       _connectionStatusController.add(true);
@@ -142,9 +185,14 @@ class WebSocketService {
   void _handleIncomingMessage(String type, dynamic data) {
     try {
       final messageData = jsonDecode(data);
-      print('Received message of type $type: $messageData');
+      print('🔍 Received message of type $type: $messageData');
+      print('🔍 Message data keys: ${messageData.keys.toList()}');
       switch (type) {
+        case 'message':
         case 'message:new':
+        case 'new_message':
+        case 'chat_message':
+          print('✅ Received new message: $messageData');
           _messageController.add(messageData);
           break;
         case 'message:edit':
@@ -177,8 +225,15 @@ class WebSocketService {
 
   /// Send a message to the current chat
   Future<void> sendMessage(String message, int chatId) async {
+    print('🚀 === SENDMESSAGE METHOD CALLED ===');
+    print('🔍 === MESSAGE SEND DEBUG ===');
+    print('🔍 WebSocket connected: $_isConnected');
+    print('🔍 Socket exists: ${_socket != null}');
+    print('🔍 Current chat ID: $_currentChatId');
+    print('🔍 Target chat ID: $chatId');
+
     if (!_isConnected || _socket == null) {
-      print('Socket.IO not connected');
+      print('❌ Socket.IO not connected');
       return;
     }
 
@@ -189,15 +244,41 @@ class WebSocketService {
         'chatId': chatId,
       };
 
-      print('Sending message: $messageData');
-      final jsonString = jsonEncode(messageData);
-      _socket!.emit('message:send', jsonString);
-      _socket!.emit(
-        'message:send',
-      );
-      print('Message sent: $message');
+      print('📤 WebSocket sending message: $messageData');
+      print('📤 Event: message:send');
+      print('📤 Socket state: ${_socket!.connected}');
+      print('📤 Timestamp: ${DateTime.now().toIso8601String()}');
+
+      print('🚀 ===== EMITTING EVENT: message:send =====');
+      print('🚀 Event: message:send');
+      print('🚀 Data: $messageData');
+
+      // Send with acknowledgment for Socket.IO
+      _socket!.emitWithAck('message:send', messageData, ack: (data) {
+        print('✅ Server acknowledged message:send: $data');
+      });
+
+      print('✅ ===== EVENT SENT: message:send =====');
+      print('✅ Message sent via WebSocket: $message');
+
+      // Send message using the correct event name: message:send
+      print('✅ Using correct event: message:send');
+
+      // Add listeners for various response events
+      _socket!.once('message:sent', (data) {
+        print('✅ Server confirmed message sent: $data');
+      });
+
+      _socket!.once('message:error', (data) {
+        print('❌ Server returned message error: $data');
+      });
+
+      _socket!.once('error', (data) {
+        print('❌ General WebSocket error: $data');
+      });
     } catch (e) {
-      print('Error sending message: $e');
+      print('❌ Error sending message: $e');
+      print('❌ Error stack trace: ${e.toString()}');
     }
   }
 
@@ -211,11 +292,25 @@ class WebSocketService {
       };
 
       final event = isTyping ? 'typing:start' : 'typing:stop';
-      print('Sending typing indicator: $event with data: $typingData');
-      _socket!.emit(event, jsonEncode(typingData));
+      print('🚀 EMITTING TYPING EVENT: $event');
+      print('📤 Typing data: $typingData');
+      print('📤 Timestamp: ${DateTime.now().toIso8601String()}');
+      _socket!.emit(event, typingData);
+      print(
+          '✅ TYPING EVENT SENT: $event at ${DateTime.now().toIso8601String()}');
     } catch (e) {
       print('Error sending typing indicator: $e');
     }
+  }
+
+  /// Test method to manually send a message (for debugging)
+  Future<void> testSendMessage(String message, int chatId) async {
+    print('🧪 === TEST MESSAGE SEND ===');
+    print('🧪 Message: $message');
+    print('🧪 Chat ID: $chatId');
+    print('🧪 Event: message:send');
+    await sendMessage(message, chatId);
+    print('🧪 === TEST MESSAGE SEND COMPLETE ===');
   }
 
   /// Send read receipt
@@ -310,13 +405,13 @@ class WebSocketService {
 
   /// Disconnect completely
   Future<void> disconnect() async {
-    // _reconnectTimer?.cancel();
-    // await _disconnectFromChat();
-    // _socket?.disconnect();
-    // _socket = null;
-    // _isConnected = false;
-    // _connectionStatusController.add(false);
-    // print('Socket.IO disconnected completely');
+    _reconnectTimer?.cancel();
+    await _disconnectFromChat();
+    _socket?.disconnect();
+    _socket = null;
+    _isConnected = false;
+    _connectionStatusController.add(false);
+    print('Socket.IO disconnected completely');
   }
 
   /// Dispose resources

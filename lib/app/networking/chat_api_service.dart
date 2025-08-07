@@ -5,6 +5,7 @@ import '/app/models/chat_list_item.dart';
 import '/app/networking/api_service.dart';
 import "/app/models/chat_list_response.dart";
 import "/app/models/search_char_response.dart";
+import "/app/models/chat_creation_response.dart";
 
 class ChatApiService extends ApiService {
   ChatApiService({BuildContext? buildContext})
@@ -49,6 +50,33 @@ class ChatApiService extends ApiService {
         },
       ),
     );
+  }
+
+  /// Get chat with previous messages (using the /chat endpoint)
+  Future<ChatCreationResponse?> getChatWithMessages({
+    required String type,
+    String? partnerId,
+  }) async {
+    try {
+      print('🔍 Loading chat with messages...');
+      print('🔍 Type: $type, Partner ID: $partnerId');
+
+      final response = await network<ChatCreationResponse>(
+        request: (request) => request.post(
+          "/chat",
+          data: {
+            "type": type,
+            if (partnerId != null) "partnerId": partnerId,
+          },
+        ),
+      );
+
+      print('✅ Chat with messages loaded: ${response?.toJson()}');
+      return response;
+    } catch (e) {
+      print('❌ Error loading chat with messages: $e');
+      return null;
+    }
   }
 
   /// Get chat messages (for loading previous messages)
@@ -120,5 +148,94 @@ class ChatApiService extends ApiService {
         queryParameters: {"q": query},
       ),
     );
+  }
+
+  /// Get recent chats with pagination
+  Future<Map<String, dynamic>?> getRecentChats({
+    int page = 1,
+    int pageSize = 20,
+  }) async {
+    try {
+      final response = await network(
+        request: (request) => request.get(
+          "/chat",
+          queryParameters: {
+            "page": page,
+            "pageSize": pageSize,
+          },
+        ),
+      );
+
+      if (response != null && response is Map<String, dynamic>) {
+        return response;
+      }
+
+      return null;
+    } catch (e) {
+      print('Error fetching recent chats: $e');
+      return null;
+    }
+  }
+
+  /// Search users
+  Future<List<Map<String, dynamic>>> searchUsers(String query) async {
+    try {
+      final response = await network(
+        request: (request) => request.get(
+          "/chat/search",
+          queryParameters: {
+            "type": "user",
+            "query": query,
+          },
+        ),
+      );
+
+      if (response != null && response is List) {
+        return List<Map<String, dynamic>>.from(response);
+      }
+
+      return [];
+    } catch (e) {
+      print('Error searching users: $e');
+      return [];
+    }
+  }
+
+  /// Create or get existing chat
+  Future<Map<String, dynamic>?> createOrGetChat({
+    required String type,
+    String? partnerId,
+  }) async {
+    try {
+      print('=== CHAT CREATION API CALL ===');
+      print('URL: ${baseUrl}/chat');
+      print('Method: POST');
+      print('Data: {"type": "$type", "partnerId": "$partnerId"}');
+
+      final response = await network(
+        request: (request) => request.post(
+          "/chat",
+          data: {
+            "type": type,
+            if (partnerId != null) "partnerId": partnerId,
+          },
+        ),
+      );
+
+      print('API response type: ${response.runtimeType}');
+      print('API response: $response');
+
+      if (response != null && response is Map<String, dynamic>) {
+        print('✅ Chat creation successful');
+        return response;
+      }
+
+      print('❌ Response is null or not a Map');
+      return null;
+    } catch (e) {
+      print('❌ Error creating/getting chat: $e');
+      print('Error stack trace: ${e.toString()}');
+      return null;
+    }
   }
 }
