@@ -10,9 +10,25 @@ class SettingsTab extends StatefulWidget {
 
 class _SettingsTabState extends NyState<SettingsTab> {
   bool _hiddenProfile = false;
+  String _username = "Alim Salim";
+  String? _phoneNumber = "+971577563263";
+  String _userAvatar = "image6.png"; // Placeholder for user's avatar image
+  String? _email = "Alim Salim"; // Placeholder for user's full name
 
   @override
-  get init => () {};
+  get init => () async {
+        final userData = await Auth.data();
+        print("User data: $userData");
+        if (userData != null) {
+          setState(() {
+            _username = userData['username'];
+            _phoneNumber = userData['phone'];
+            _userAvatar = userData['avatar'] ?? "image6.png"; // Default avatar
+            _email = userData['email']; // Default full
+            // _hiddenProfile = userData['hiddenProfile'] ?? false;
+          });
+        }
+      };
 
   @override
   Widget view(BuildContext context) {
@@ -45,8 +61,8 @@ class _SettingsTabState extends NyState<SettingsTab> {
                     const SizedBox(height: 16),
 
                     // User Name
-                    const Text(
-                      'Alim Salim',
+                    Text(
+                      "@" + _username,
                       style: TextStyle(
                         color: Color(0xFFE8E7EA),
                         fontSize: 18,
@@ -58,7 +74,7 @@ class _SettingsTabState extends NyState<SettingsTab> {
 
                     // Phone Number and Username
                     Text(
-                      '+971577563263 | Ghostrider24',
+                      '${_phoneNumber ?? _email} | $_username',
                       style: TextStyle(
                         color: Color(0xFF8E9297),
                         fontSize: 14,
