@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:nylo_framework/nylo_framework.dart';
-import '/app/models/chat.dart';
 import '/app/models/chat_list_item.dart';
 import '/app/networking/api_service.dart';
 import "/app/models/chat_list_response.dart";
@@ -127,8 +126,8 @@ class ChatApiService extends ApiService {
   }
 
   /// Get chat details
-  Future<Chat?> getChatDetails({required int chatId}) async {
-    return await network<Chat>(
+  Future<ChatListItem?> getChatDetails({required int chatId}) async {
+    return await network<ChatListItem>(
       request: (request) => request.get("/chat/$chatId"),
     );
   }

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_app/resources/pages/profile_details_page.dart';
 import 'package:nylo_framework/nylo_framework.dart';
 
 class SettingsTab extends StatefulWidget {

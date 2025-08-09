@@ -13,7 +13,6 @@ import '/resources/pages/video_call_page.dart';
 import '/resources/pages/profile_details_page.dart';
 import '/resources/pages/welcome_intro_page.dart';
 import '/resources/pages/welcome_page.dart';
-import '/routes/guards/auth_route_guard.dart';
 
 /* App Router
 |--------------------------------------------------------------------------

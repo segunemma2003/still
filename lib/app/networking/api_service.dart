@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:pretty_dio_logger/pretty_dio_logger.dart';
 import '/config/decoders.dart';
-import '/app/models/user.dart';
 import 'package:nylo_framework/nylo_framework.dart';
 
 /* ApiService

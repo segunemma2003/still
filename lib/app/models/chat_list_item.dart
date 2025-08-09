@@ -1,17 +1,27 @@
+import 'package:flutter_app/app/models/participants.dart';
+
 import 'message.dart';
 import 'chat_partner.dart';
 
 class ChatListItem {
   final int id;
+  final int creatorId;
   final String name;
+  final String type;
+  final bool isPublic;
+  final int? partnerId;
+  final String? inviteCode;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
   final Message? lastMessage;
   final DateTime? lastMessageTime;
   final int unreadCount;
   final String? avatar;
   final bool isOnline;
   final bool isGroup;
-  final String type;
-  final List<String> participants;
+
+  final List<Participant> participants;
   final List<Message> messages;
   final Partner? partner;
 
@@ -19,6 +29,12 @@ class ChatListItem {
     required this.id,
     required this.name,
     required this.type,
+    required this.creatorId,
+    required this.isPublic,
+    required this.createdAt,
+    required this.updatedAt,
+    this.partnerId,
+    this.inviteCode,
     this.lastMessage,
     this.lastMessageTime,
     this.unreadCount = 0,
@@ -33,6 +49,15 @@ class ChatListItem {
   factory ChatListItem.fromJson(Map<String, dynamic> json) {
     return ChatListItem(
       id: json['id'],
+      creatorId: json['creatorId'],
+      type: json['type'] ?? 'PRIVATE',
+      isPublic: json['isPublic'] ?? false,
+      inviteCode: json['inviteCode'],
+      partnerId: json['partnerId'] != null
+          ? int.tryParse(json['partnerId'].toString())
+          : null,
+      createdAt: DateTime.parse(json['createdAt']),
+      updatedAt: DateTime.parse(json['updatedAt']),
       name: (json['type'] == 'CHANNEL')
           ? (json['name'] ?? 'Unknown')
           : (json['partner'] != null && json['partner']['username'] != null
@@ -49,8 +74,8 @@ class ChatListItem {
       avatar: json['avatar'] != null ? json['avatar'] as String : null,
       isOnline: json['isOnline'] ?? false,
       isGroup: (json['type'] == 'CHANNEL'),
-      type: json['type'] ?? 'PRIVATE',
-      participants: List<String>.from(json['participants'] ?? []),
+      participants: List<Participant>.from(
+          (json['members'] as List).map((p) => Participant.fromJson(p))),
       messages: (json['messages'] != null)
           ? List<Message>.from(
               (json['messages'] as List).map((m) => Message.fromJson(m)))
@@ -80,18 +105,27 @@ class ChatListItem {
     int? id,
     String? name,
     Message? lastMessage,
+    bool? isPublic,
+    String? inviteCode,
     DateTime? lastMessageTime,
     int? unreadCount,
     String? avatar,
     bool? isOnline,
     bool? isGroup,
-    List<String>? participants,
+    List<Participant>? participants,
     List<Message>? messages,
     Partner? partner,
   }) {
     return ChatListItem(
       id: id ?? this.id,
       name: name ?? this.name,
+      type: this.type, // type is not nullable, so we keep it as is
+      creatorId: this.creatorId,
+      isPublic: this.isPublic,
+      inviteCode: this.inviteCode,
+      createdAt: this.createdAt,
+      updatedAt: this.updatedAt,
+      partnerId: this.partnerId,
       lastMessage: lastMessage ?? this.lastMessage,
       lastMessageTime: lastMessageTime ?? this.lastMessageTime,
       unreadCount: unreadCount ?? this.unreadCount,
@@ -101,7 +135,6 @@ class ChatListItem {
       participants: participants ?? this.participants,
       messages: messages ?? this.messages,
       partner: partner ?? this.partner,
-      type: this.type, // type is not nullable, so we keep it as is
     );
   }
 }

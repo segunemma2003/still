@@ -8,7 +8,6 @@ import '/app/models/chat_creation_response.dart';
 import '/app/networking/api_service.dart';
 import '/app/networking/auth_api_service.dart';
 import '/app/networking/chat_api_service.dart';
-import 'package:nylo_framework/nylo_framework.dart';
 
 /* Model Decoders
 |--------------------------------------------------------------------------

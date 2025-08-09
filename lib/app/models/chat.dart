@@ -14,6 +14,7 @@ class Chat {
 
   final List<ChatUser> users;
   final Partner? partner;
+
   final List<Message> messages;
 
   Chat({
@@ -66,7 +67,7 @@ class Chat {
       'inviteCode': inviteCode,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
-      'Users': users.map((user) => user.toJson()).toList(),
+      'users': users.map((user) => user.toJson()).toList(),
     };
   }
 

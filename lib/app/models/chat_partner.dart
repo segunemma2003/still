@@ -4,12 +4,14 @@ class Partner {
   final String? firstName;
   final String? lastName;
   final String? status;
+  final String? avatar;
   Partner({
     required this.id,
     required this.username,
     required this.status,
     this.firstName,
     this.lastName,
+    this.avatar,
   });
 
   factory Partner.fromJson(Map<String, dynamic> json) {
@@ -19,6 +21,7 @@ class Partner {
       firstName: json['firstName'],
       lastName: json['lastName'],
       status: json['status'],
+      avatar: json['avatar'],
     );
   }
 

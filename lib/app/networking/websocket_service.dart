@@ -47,10 +47,7 @@ class WebSocketService {
       String? accessToken = userData != null ? userData['accessToken'] : null;
 
       _socket = IO.io(getEnv('API_BASE_URL'), <String, dynamic>{
-        'transports': <String>[
-          'websocket',
-          'polling'
-        ], // Add polling as fallback
+        'transports': <String>['websocket'], // Add polling as fallback
         'autoConnect': false,
         'auth': {
           'token': accessToken,
@@ -71,7 +68,7 @@ class WebSocketService {
         _isConnecting = false;
         _reconnectAttempts = 0;
         _connectionStatusController.add(true);
-        await _sendAuthMessage();
+        // await _sendAuthMessage();
       });
 
       _socket!.on('disconnect', (reason) {
@@ -104,10 +101,6 @@ class WebSocketService {
           (data) => _handleIncomingMessage('message', jsonEncode(data)));
       _socket!.on('message:new',
           (data) => _handleIncomingMessage('message:new', jsonEncode(data)));
-      _socket!.on('new_message',
-          (data) => _handleIncomingMessage('new_message', jsonEncode(data)));
-      _socket!.on('chat_message',
-          (data) => _handleIncomingMessage('chat_message', jsonEncode(data)));
       _socket!.on('message:edit',
           (data) => _handleIncomingMessage('message:edit', jsonEncode(data)));
       _socket!.on('message:delete',
@@ -124,12 +117,12 @@ class WebSocketService {
           (data) => _handleIncomingMessage('read_receipt', jsonEncode(data)));
 
       // Catch-all listener for debugging
-      _socket!.onAny((event, data) {
-        print('🎯 Received ANY event: $event with data: $data');
-        if (event.startsWith('message') || event.contains('message')) {
-          _handleIncomingMessage(event, jsonEncode(data));
-        }
-      });
+      // _socket!.onAny((event, data) {
+      //   print('🎯 Received ANY event: $event with data: $data');
+      //   if (event.startsWith('message') || event.contains('message')) {
+      //     _handleIncomingMessage(event, jsonEncode(data));
+      //   }
+      // });
     } catch (e) {
       _isConnecting = false;
       _handleError(e);
@@ -138,31 +131,31 @@ class WebSocketService {
 
   /// Connect to a specific chat room
   Future<void> connectToChat({required String chatId}) async {
-    if (_currentChatId == chatId && _isConnected) {
-      print('Already connected to chat $chatId');
-      return;
-    }
+    // if (_currentChatId == chatId && _isConnected) {
+    //   print('Already connected to chat $chatId');
+    //   return;
+    // }
 
-    // Disconnect from current chat if different
-    if (_currentChatId != null && _currentChatId != chatId) {
-      await _disconnectFromChat();
-    }
+    // // Disconnect from current chat if different
+    // if (_currentChatId != null && _currentChatId != chatId) {
+    //   await _disconnectFromChat();
+    // }
 
-    try {
-      _currentChatId = chatId;
-      // Emit a join event to the server for the chat room with acknowledgment
-      _socket?.emitWithAck('join_chat', {'chatId': chatId}, ack: (data) {
-        print('✅ Server acknowledged join_chat: $data');
-      });
-      _isConnected = true;
-      _reconnectAttempts = 0;
-      _connectionStatusController.add(true);
-      print('Socket.IO joined chat $chatId');
-      await _sendAuthMessage();
-    } catch (e) {
-      print('Error connecting to chat $chatId: $e');
-      _handleError(e);
-    }
+    // try {
+    //   _currentChatId = chatId;
+    //   // Emit a join event to the server for the chat room with acknowledgment
+    //   _socket?.emitWithAck('join_chat', {'chatId': chatId}, ack: (data) {
+    //     print('✅ Server acknowledged join_chat: $data');
+    //   });
+    //   _isConnected = true;
+    //   _reconnectAttempts = 0;
+    //   _connectionStatusController.add(true);
+    //   print('Socket.IO joined chat $chatId');
+    //   await _sendAuthMessage();
+    // } catch (e) {
+    //   print('Error connecting to chat $chatId: $e');
+    //   _handleError(e);
+    // }
   }
 
   /// Send authentication message with Bearer token
@@ -185,13 +178,9 @@ class WebSocketService {
   void _handleIncomingMessage(String type, dynamic data) {
     try {
       final messageData = jsonDecode(data);
-      print('🔍 Received message of type $type: $messageData');
-      print('🔍 Message data keys: ${messageData.keys.toList()}');
+
       switch (type) {
-        case 'message':
         case 'message:new':
-        case 'new_message':
-        case 'chat_message':
           print('✅ Received new message: $messageData');
           _messageController.add(messageData);
           break;
@@ -209,12 +198,6 @@ class WebSocketService {
         case 'chat_list_update':
           _chatListController.add(messageData);
           break;
-        case 'typing':
-          _messageController.add(messageData);
-          break;
-        case 'read_receipt':
-          _messageController.add(messageData);
-          break;
         default:
           print('Unknown message type: $type');
       }
@@ -224,7 +207,7 @@ class WebSocketService {
   }
 
   /// Send a message to the current chat
-  Future<void> sendMessage(String message, int chatId) async {
+  Future<void> sendMessage(String message, int chatId, int? referenceId) async {
     if (!_isConnected || _socket == null) {
       print('Socket.IO not connected');
       return;
@@ -235,15 +218,12 @@ class WebSocketService {
         'type': 'TEXT',
         'text': message,
         'chatId': chatId,
+        if (referenceId != null) 'referenceId': referenceId,
       };
 
       print('Sending message: $messageData');
       final jsonString = jsonEncode(messageData);
       _socket!.emit('message:send', jsonString);
-      _socket!.emit(
-        'message:send',
-      );
-      print('Message sent: $message');
     } catch (e) {
       print('Error sending message: $e');
     }
@@ -270,28 +250,12 @@ class WebSocketService {
     }
   }
 
-  /// Test method to manually send a message (for debugging)
-  Future<void> testSendMessage(String message, int chatId) async {
-    print('🧪 === TEST MESSAGE SEND ===');
-    print('🧪 Message: $message');
-    print('🧪 Chat ID: $chatId');
-    print('🧪 Event: message:send');
-    await sendMessage(message, chatId);
-    print('🧪 === TEST MESSAGE SEND COMPLETE ===');
-  }
-
   /// Send read receipt
-  Future<void> sendReadReceipt(String messageId) async {
+  Future<void> sendReadReceipt(List<int> messageIds) async {
     if (!_isConnected || _socket == null) return;
 
     try {
-      final readData = {
-        'type': 'read_receipt',
-        'messageId': messageId,
-        'chatId': _currentChatId,
-      };
-
-      _socket!.emit('read_receipt', readData);
+      _socket!.emit('message:read', messageIds);
     } catch (e) {
       print('Error sending read receipt: $e');
     }

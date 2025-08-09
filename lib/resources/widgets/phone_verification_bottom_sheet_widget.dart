@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:nylo_framework/nylo_framework.dart';
 
 class PhoneVerificationBottomSheet extends StatefulWidget {
   final String phone;

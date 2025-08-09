@@ -1,25 +1,22 @@
 import 'dart:ui';
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_app/app/models/message.dart';
-import 'package:flutter_app/resources/pages/home_page.dart';
 import 'package:flutter_svg/svg.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:nylo_framework/nylo_framework.dart';
-import '/app/models/chat.dart';
 import '/app/models/chat_list_item.dart';
-import '/app/models/chat_partner.dart';
 import '/app/networking/chat_api_service.dart';
 import '/app/networking/websocket_service.dart';
 import '/resources/pages/video_call_page.dart';
 import '/resources/pages/voice_call_page.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:file_picker/file_picker.dart';
+import "../../app/utils/chat.dart";
 
 class ChatScreenPage extends NyStatefulWidget {
   static RouteView path = ("/chat-screen", (_) => ChatScreenPage());
@@ -36,7 +33,7 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
   bool _hasText = false;
 
   // Chat data
-  Chat? _chat;
+  ChatListItem? _chat;
   String _userName = 'Ahmad';
   String? _userImage;
   bool _isOnline = false;
@@ -49,16 +46,16 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
   StreamSubscription<Map<String, dynamic>>? _notificationSubscription;
   bool _isWebSocketConnected = false;
 
-  List<Message> messages = [];
+  List<Message> _messages = [];
   int? _currentUserId;
   @override
   get init => () async {
-        print("Init method called"); // Debug
         _messageController.addListener(_onTextChanged);
         // _messageController.addListener(listener)
         // Get current user id from Auth
         try {
           final userData = await Auth.data();
+          print("User data: $userData"); // Debug
           if (userData != null && userData['id'] != null) {
             _currentUserId = userData['id'] is int
                 ? userData['id']
@@ -71,124 +68,54 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
 
         // Retrieve chat data from navigation
         final navigationData = data();
+
         if (navigationData != null) {
-          print('=== NAVIGATION DATA DEBUG ===');
-          print('Full navigation data: $navigationData');
-          print('Keys: ${navigationData.keys.toList()}');
-
-          _chat = navigationData['chat'] as Chat?;
-          print('Chat data from navigation: $_chat');
-          print('Chat creation data: ${navigationData['chatData']}');
-          print('Chat ID from navigation: ${navigationData['chatId']}');
-          print('Partner ID from navigation: ${navigationData['partnerId']}');
-          print(
-              'Partner username from navigation: ${navigationData['partnerUsername']}');
-          print(
-              'Chat list item from navigation: ${navigationData['chatListItem']}');
-          final chatListItem = navigationData['chatListItem'] as ChatListItem?;
-
-          // Handle new chat creation data
-          if (navigationData['chatData'] != null) {
-            // Create chat object from chat creation response
-            final chatData = navigationData['chatData'];
-            _chat = Chat(
-              id: chatData.id,
-              creatorId: chatData.creatorId,
-              name: chatData.name,
-              type: chatData.type,
-              isPublic: chatData.isPublic,
-              inviteCode: chatData.inviteCode,
-              createdAt: DateTime.parse(chatData.createdAt),
-              updatedAt: DateTime.parse(chatData.updatedAt),
-              partner: chatData.partner != null
-                  ? Partner(
-                      id: chatData.partner!['id'],
-                      username: chatData.partner!['username'],
-                      firstName: chatData.partner!['firstName'],
-                      lastName: chatData.partner!['lastName'],
-                      status: chatData.partner!['status'],
-                    )
-                  : null,
-              messages: chatData.messages != null
-                  ? (chatData.messages! as List<dynamic>)
-                      .map((msg) =>
-                          Message.fromJson(msg as Map<String, dynamic>))
-                      .toList()
-                  : [],
-              users: [], // Empty users list for now
-            );
-
-            // Set user info from chat data
-            _userName = chatData.partnerUsername ??
-                navigationData['userName'] as String? ??
-                'Unknown User';
-            _userImage = navigationData['userImage'] as String?;
-            _isOnline = chatData.partnerStatus == 'online';
-            _isVerified = navigationData['isVerified'] as bool? ?? false;
-
-            print('Created chat from chatData: ${_chat?.id}');
-          }
-          // Use existing chat details if available
-          else if (_chat != null) {
-            _userName = _chat!.name ?? 'Unknown User';
-            _userImage = null;
-            _isOnline = _chat!.partner?.status == 'online';
-            _isVerified = false;
-          } else if (chatListItem != null) {
-            _userName = chatListItem.name;
-            _userImage = chatListItem.avatar;
-            _isOnline = _chat!.partner?.status == 'online';
-            _isVerified = false;
-          } else {
-            _userName = navigationData['userName'] as String? ?? 'Ahmad';
-            _userImage = navigationData['userImage'] as String?;
-            _isOnline = false;
-            _isVerified = navigationData['isVerified'] as bool? ?? false;
-
-            // Create a fallback chat object if we have basic info but no chat data
-            if (navigationData['chatId'] != null ||
-                navigationData['partnerId'] != null) {
-              _chat = Chat(
-                id: navigationData['chatId'] ?? 0,
-                creatorId: _currentUserId ?? 0,
-                name: _userName,
-                type: 'PRIVATE',
-                isPublic: false,
-                inviteCode: null,
-                createdAt: DateTime.now(),
-                updatedAt: DateTime.now(),
-                partner: navigationData['partnerId'] != null
-                    ? Partner(
-                        id: navigationData['partnerId'],
-                        username:
-                            navigationData['partnerUsername'] ?? _userName,
-                        firstName: null,
-                        lastName: null,
-                        status: 'offline',
-                      )
-                    : null,
-                messages: [],
-                users: [],
-              );
-              print('Created fallback chat with ID: ${_chat?.id}');
-            }
-          }
-
-          print('Chat data loaded: ${_chat?.id}');
-          print('User name: $_userName');
-          print('Is online: $_isOnline');
+          final chatId = navigationData['chatId'] as int?;
 
           // Load previous messages if we have a chat
-          if (_chat != null) {
-            print('🔄 Starting to load previous messages...');
-            await _loadPreviousMessages();
-            print('🔄 Previous messages loaded, connecting to WebSocket...');
+          if (chatId != null) {
+            _chat = await apiService.getChatDetails(chatId: chatId);
+            print('Chat loaded: ${_chat?.name}');
+            if (_chat != null) {
+              if (_chat!.type == 'PRIVATE' && _chat!.partner != null) {
+                _userName = _chat!.name;
+                _userImage = getChatAvatar(_chat!, getEnv("API_BASE_URL"));
+                _isOnline = _chat!.partner!.status == "online";
+              } else {
+                _userName = _chat!.name ?? 'Group';
+                _userImage = getChatAvatar(_chat!, getEnv("API_BASE_URL"));
+                _isOnline = false;
+                _isVerified = false;
+              }
+            }
+            setState(() {
+              _messages = _chat?.messages ?? [];
+            });
+
+            _scrollToBottom();
             await _connectToWebSocket();
+            _sendReadReceipts(_messages);
           }
         } else {
           routeToAuthenticatedRoute();
         }
       };
+
+  Future<void> _sendReadReceipts(List<Message> messages) async {
+    if (_currentUserId == null) return;
+    final unreadMessageIds = messages
+        .where((msg) => msg.senderId != _currentUserId)
+        .map((msg) => msg.id)
+        .toList();
+    if (unreadMessageIds.isNotEmpty) {
+      try {
+        await WebSocketService().sendReadReceipt(unreadMessageIds);
+        print('✅ Read receipts sent for messages: $unreadMessageIds');
+      } catch (e) {
+        print('❌ Error sending read receipts: $e');
+      }
+    }
+  }
 
   // Connect to WebSocket
   Future<void> _connectToWebSocket() async {
@@ -204,35 +131,24 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
         _isWebSocketConnected = WebSocketService().isConnected;
 
         print('WebSocket connected: $_isWebSocketConnected');
+        _wsSubscription?.cancel();
+        _notificationSubscription?.cancel();
 
-        // Listen for incoming messages
         _wsSubscription =
             WebSocketService().messageStream.listen((messageData) {
-          print('📨 Message stream received: $messageData');
-          print('📍 Current chat ID: ${_chat?.id}');
           _handleIncomingMessage(messageData);
         });
+
         _notificationSubscription =
             WebSocketService().notificationStream.listen((notificationData) {
           _handleIncomingNotification(notificationData);
         });
 
-        // Listen for connection status changes
         WebSocketService().connectionStatusStream.listen((isConnected) {
           if (mounted) {
             setState(() {
               _isWebSocketConnected = isConnected;
             });
-          }
-          print('WebSocket connection status changed: $isConnected');
-
-          // If WebSocket just connected, try sending any pending messages
-          if (isConnected && messages.isNotEmpty) {
-            final lastMessage = messages.last;
-            if (lastMessage.senderId == _currentUserId) {
-              print('🔄 WebSocket connected, retrying last message send...');
-              WebSocketService().sendMessage(lastMessage.text ?? '', _chat!.id);
-            }
           }
         });
       } catch (e) {
@@ -287,6 +203,32 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
           _typingUsers = newTypingUsers;
         });
       }
+    } else if (notificationData['action'] == "message:delivered") {
+      // final List<int> ids = List<int>.from(notificationData['ids']);
+      List<int> ids =
+          (notificationData['ids'] as List?)?.cast<int>() ?? <int>[];
+
+      setState(() {
+        _messages = _messages.map((msg) {
+          if (ids.contains(msg.id)) {
+            msg.isDelivered = true;
+          }
+          return msg;
+        }).toList();
+      });
+    } else if (notificationData['action'] == "message:read") {
+      print(notificationData['ids']);
+      final dynamic idsData = notificationData['ids'];
+      final List<int> ids =
+          (idsData as List<dynamic>).map((e) => e as int).toList();
+      setState(() {
+        _messages = _messages.map((msg) {
+          if (ids.contains(msg.id)) {
+            msg.isRead = true;
+          }
+          return msg;
+        }).toList();
+      });
     }
   }
 
@@ -306,11 +248,11 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
 
           setState(() {
             // Convert API messages to Message objects
-            messages =
+            _messages =
                 chatData.messages!.map((msg) => Message.fromJson(msg)).toList();
           });
 
-          print('✅ Loaded ${messages.length} messages into chat');
+          print('✅ Loaded ${_messages.length} messages into chat');
 
           // Scroll to bottom to show latest messages
           _scrollToBottom();
@@ -319,9 +261,9 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
           // Use existing messages if available
           if (_chat!.messages.isNotEmpty) {
             setState(() {
-              messages = _chat!.messages;
+              _messages = _chat!.messages;
             });
-            print('✅ Using existing messages: ${messages.length} messages');
+            print('✅ Using existing messages: ${_messages.length} messages');
           }
         }
       } catch (e) {
@@ -329,9 +271,10 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
         // Fallback to existing messages
         if (_chat!.messages.isNotEmpty) {
           setState(() {
-            messages = _chat!.messages;
+            _messages = _chat!.messages;
           });
-          print('✅ Fallback to existing messages: ${messages.length} messages');
+          print(
+              '✅ Fallback to existing messages: ${_messages.length} messages');
         }
       }
     }
@@ -345,6 +288,7 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
   void _handleIncomingMessage(Map<String, dynamic> messageData) {
     // This runs on the main thread and won't block UI
     print('Handling incoming message: $messageData');
+    print('Message ID: ${messageData['id']}');
 
     if (!mounted) return; // Don't update state if widget is disposed
 
@@ -363,41 +307,31 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
       final action = messageData['action'];
 
       if (action != null && action == 'delete') {
-        final index = messages.indexWhere((msg) => msg.id == messageData['id']);
+        final index =
+            _messages.indexWhere((msg) => msg.id == messageData['id']);
         // Remove message if action is delete
         print("Message deleted: ${messageData['id']}");
         print("Removing message at index: $index");
         if (index != -1) {
-          messages.removeAt(index);
+          _messages.removeAt(index);
         }
       } else {
         Message newMessage = Message.fromJson(messageData);
-        final index = messages.indexWhere((msg) => msg.id == newMessage.id);
-
-        if (index != -1) {
-          // Update existing message
-          messages[index] = newMessage;
-          print(
-              '✅ Message updated in chat. Total messages: ${messages.length}');
-        } else {
-          // Check if this is a message from current user that we already added locally
-          final isFromCurrentUser = newMessage.senderId == _currentUserId;
-          final hasRecentMessage = messages.isNotEmpty &&
-              messages.last.senderId == _currentUserId &&
-              messages.last.text == newMessage.text;
-
-          if (isFromCurrentUser && hasRecentMessage) {
-            print('🔄 Ignoring duplicate message from current user');
+        if (newMessage.referenceId != null) {
+          final index = _messages
+              .indexWhere((msg) => msg.referenceId == newMessage.referenceId);
+          if (index != -1) {
+            _messages[index] = newMessage;
             return;
           }
+        }
 
-          messages.add(newMessage);
-          print(
-              '✅ Message added to current chat. Total messages: ${messages.length}');
+        _messages.add(newMessage);
+        if (newMessage.senderId != _currentUserId) {
+          WebSocketService().sendReadReceipt([newMessage.id]);
         }
       }
     });
-
     _scrollToBottom();
   }
 
@@ -473,6 +407,8 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
       print("Chat ID: ${_chat?.id}");
 
       // Add message to UI immediately for better UX
+      final referenceId = DateTime.now().millisecondsSinceEpoch;
+
       setState(() {
         final now = DateTime.now();
         final newMessage = Message(
@@ -491,27 +427,22 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
             firstName: null,
             lastName: null,
           ),
-          isSent: true,
+
+          referenceId: referenceId,
+          isSent: false,
+          statuses: [],
+          isRead: false,
           isDelivered: false,
           isAudio: false,
           audioDuration: null,
         );
-        messages.add(newMessage);
-        print('✅ Message added to list. Total messages: ${messages.length}');
+        _messages.add(newMessage);
+        print('✅ Message added to list. Total messages: ${_messages.length}');
         print('Message text: "${newMessage.text}"');
       });
 
       _messageController.clear();
       _scrollToBottom();
-
-      // Send via WebSocket if connected (real-time)
-      print('🔍 Checking WebSocket connection status...');
-      print('🔍 Local _isWebSocketConnected: $_isWebSocketConnected');
-      print(
-          '🔍 WebSocketService().isConnected: ${WebSocketService().isConnected}');
-      print(
-          '🔍 WebSocketService().currentChatId: ${WebSocketService().currentChatId}');
-      print('🔍 Current chat ID: ${_chat?.id}');
 
       final shouldSendViaWebSocket =
           _isWebSocketConnected || WebSocketService().isConnected;
@@ -519,58 +450,16 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
 
       if (shouldSendViaWebSocket) {
         print('🚀 === SEND MESSAGE TRIGGERED ===');
-        print('📤 Sending message to chat ID: ${_chat!.id}');
-        print(
-            '📤 WebSocket connected to chat: ${WebSocketService().currentChatId}');
-        print('📤 Message text: "$messageText"');
-        print('📤 Timestamp: ${DateTime.now().toIso8601String()}');
-
-        // Call the sendMessage function
-        WebSocketService().sendMessage(messageText, _chat!.id);
+        WebSocketService().sendMessage(messageText, _chat!.id, referenceId);
         print('✅ SendMessage method called');
-
-        // Update as delivered after a short delay
-        // Future.delayed(const Duration(milliseconds: 500), () {
-        //   setState(() {
-        //     if (messages.isNotEmpty) {
-        //       final lastMessage = messages.last;
-        //       messages[messages.length - 1] = Message(
-        //         text: lastMessage.text,
-        //         time: lastMessage.time,
-        //         isSent: true,
-        //         isDelivered: true,
-        //         isAudio: lastMessage.isAudio,
-        //         audioDuration: lastMessage.audioDuration,
-        //       );
-        //     }
-        //   });
-        // });
-      }
-      // Fallback to API if WebSocket not connected
-      else if (_chat != null) {
+      } else if (_chat != null) {
         try {
           final result = await apiService.sendMessage(
             chatId: _chat!.id,
             message: messageText,
           );
 
-          if (result != null) {
-            print('Message sent via API');
-            // Update the last message as delivered
-            // setState(() {
-            //   if (messages.isNotEmpty) {
-            //     final lastMessage = messages.last;
-            //     messages[messages.length - 1] = Message(
-            //       text: lastMessage.text,
-            //       time: lastMessage.time,
-            //       isSent: true,
-            //       isDelivered: true,
-            //       isAudio: lastMessage.isAudio,
-            //       audioDuration: lastMessage.audioDuration,
-            //     );
-            //   }
-            // });
-          }
+          if (result != null) {}
         } catch (e) {
           print('Error sending message via API: $e');
         }
@@ -582,7 +471,7 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
         Future.delayed(const Duration(seconds: 1), () {
           if (WebSocketService().isConnected && mounted) {
             print('🔄 Retrying message send after WebSocket connection...');
-            WebSocketService().sendMessage(messageText, _chat!.id);
+            WebSocketService().sendMessage(messageText, _chat!.id, referenceId);
           } else {
             print('❌ WebSocket still not connected after retry');
           }
@@ -655,10 +544,10 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
                           ),
                           child: ClipOval(
                             child: _userImage != null
-                                ? Image.asset(
+                                ? Image.network(
                                     _userImage!,
                                     fit: BoxFit.cover,
-                                  ).localAsset()
+                                  )
                                 : Icon(
                                     Icons.person,
                                     color: Colors.grey.shade500,
@@ -785,11 +674,9 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
                           },
                           child: ListView.builder(
                             controller: _scrollController,
-                            itemCount: messages.length,
+                            itemCount: _messages.length,
                             itemBuilder: (context, index) {
-                              print(
-                                  'Building message ${index + 1}/${messages.length}: ${messages[index].text}');
-                              return _buildMessage(messages[index]);
+                              return _buildMessage(_messages[index]);
                             },
                           ),
                         ),
@@ -1004,7 +891,8 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
         _currentUserId != null && message.senderId == _currentUserId;
 
     // Check if this is the last message to add extra bottom spacing
-    final bool isLastMessage = messages.isNotEmpty && messages.last == message;
+    final bool isLastMessage =
+        _messages.isNotEmpty && _messages.last == message;
 
     return Container(
       margin: EdgeInsets.fromLTRB(2, 0, 2,
@@ -1082,13 +970,34 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
                       ),
                       if (isSentByMe) ...[
                         const SizedBox(width: 4),
-                        Icon(
-                          message.isDelivered ? Icons.done_all : Icons.done,
-                          color: message.isDelivered
-                              ? const Color(0xFF3498DB)
-                              : Colors.white.withOpacity(0.7),
-                          size: 16,
-                        ),
+                        if (!message.isSent)
+                          Icon(
+                            Icons.schedule,
+                            color: Colors.white.withOpacity(0.7),
+                            size: 16,
+                          ),
+                        if (message.isSent &&
+                            !message.isDelivered &&
+                            !message.isRead)
+                          Icon(
+                            Icons.done,
+                            color: Colors.white.withOpacity(0.7),
+                            size: 16,
+                          ),
+
+                        // if (message.isDelivered)
+                        //   Icon(
+                        //     Icons.done,
+                        //     color: Colors.white.withOpacity(0.7),
+                        //     size: 16,
+                        //   ),
+
+                        if (message.isRead)
+                          Icon(
+                            Icons.done_all,
+                            color: Colors.white.withOpacity(0.7),
+                            size: 16,
+                          ),
                       ],
                     ],
                   ),

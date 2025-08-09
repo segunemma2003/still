@@ -3,19 +3,20 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_app/app/models/chat_list_item.dart';
 import 'package:flutter_app/app/models/contact_info.dart';
+import 'package:flutter_app/app/models/message.dart';
 import 'package:flutter_app/resources/widgets/alphabet_scroll_view_widget.dart';
 import 'package:flutter_svg/svg.dart';
 import 'package:nylo_framework/nylo_framework.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
-import 'package:permission_handler/permission_handler.dart';
 import '../../app/networking/contact_api_service.dart';
 import '../../app/networking/chat_api_service.dart';
-import '../../app/models/chat_info.dart';
 import '../../app/models/user_info.dart';
 import '../../app/models/chat_creation_response.dart';
-
 import '../pages/chat_screen_page.dart';
+import '../../app/networking/websocket_service.dart';
+import "../../app/utils/chat.dart";
 
 class ChatsTab extends StatefulWidget {
   const ChatsTab({super.key});
@@ -27,7 +28,7 @@ class ChatsTab extends StatefulWidget {
 class _ChatsTabState extends NyState<ChatsTab> {
   List<ContactInfo> contactList = [];
   List<ContactInfo> filteredContactList = [];
-  List<ChatInfo> chatList = [];
+  List<ChatListItem> chatList = [];
   List<UserInfo> searchResults = [];
   List<String> recentSearches = [];
   Map<String, List<UserInfo>> searchCache = {};
@@ -37,8 +38,13 @@ class _ChatsTabState extends NyState<ChatsTab> {
   TextEditingController searchController = TextEditingController();
   Timer? _searchDebounceTimer;
 
+  // Websocket subscriptions
+  StreamSubscription<Map<String, dynamic>>? _wsSubscription;
+  StreamSubscription<Map<String, dynamic>>? _msgStream;
+  StreamSubscription<bool>? _connectionSubscription;
   @override
   get init => () {
+        _initializeWebSocket();
         _initContactList();
         _loadRecentChats();
         _preloadCommonSearches();
@@ -48,7 +54,39 @@ class _ChatsTabState extends NyState<ChatsTab> {
   void dispose() {
     searchController.dispose();
     _searchDebounceTimer?.cancel();
+    _wsSubscription?.cancel();
+    _msgStream?.cancel();
+    _connectionSubscription?.cancel();
     super.dispose();
+  }
+
+  Future<void> _initializeWebSocket() async {
+    await WebSocketService().initializeConnection();
+
+    _msgStream = WebSocketService().messageStream.listen((messageData) {
+      _handleIncomingMessage(messageData);
+    });
+  }
+
+  void _handleIncomingMessage(Map<String, dynamic> messageData) {
+    // This runs on the main thread and won't block UI
+
+    Message newMessage = Message.fromJson(messageData);
+
+    setState(() {
+      final index = chatList.indexWhere((chat) => chat.id == newMessage.chatId);
+      if (index != -1) {
+        final chat = chatList[index];
+        chatList[index] = chat.copyWith(
+          lastMessage: newMessage,
+          unreadCount: (chat.unreadCount ?? 0) + 1,
+        );
+        // Move chat to top
+        final updatedChat = chatList.removeAt(index);
+        print("Inserted here");
+        chatList.insert(0, updatedChat);
+      }
+    });
   }
 
   // Clear search cache (call this when user logs out or app refreshes)
@@ -204,13 +242,13 @@ class _ChatsTabState extends NyState<ChatsTab> {
 
     // Add recent chats that match
     for (var chat in chatList) {
-      if (chat.partnerUsername?.toLowerCase().contains(query.toLowerCase()) ??
+      if (chat.partner?.username.toLowerCase().contains(query.toLowerCase()) ??
           false) {
         quickResults.add(UserInfo(
-          id: chat.partnerIdInt,
-          username: chat.partnerUsername,
-          firstName: chat.partnerFirstName,
-          lastName: chat.partnerLastName,
+          id: chat.partner?.id,
+          username: chat.partner?.username,
+          firstName: chat.partner?.firstName,
+          lastName: chat.partner?.lastName,
           email: null,
           phone: null,
           avatar: null,
@@ -304,27 +342,6 @@ class _ChatsTabState extends NyState<ChatsTab> {
 
       searchCache[''] = recentContacts; // Empty query shows recent contacts
     }
-  }
-
-  // Get search suggestions
-  List<String> _getSearchSuggestions(String query) {
-    List<String> suggestions = [];
-
-    // Add recent searches that match
-    for (String recent in recentSearches) {
-      if (recent.toLowerCase().contains(query.toLowerCase())) {
-        suggestions.add(recent);
-      }
-    }
-
-    // Add contact names that match
-    for (var contact in contactList) {
-      if (contact.name?.toLowerCase().contains(query.toLowerCase()) ?? false) {
-        suggestions.add(contact.name!);
-      }
-    }
-
-    return suggestions.take(3).toList(); // Limit to 3 suggestions
   }
 
   // Handle user selection from search
@@ -566,8 +583,8 @@ class _ChatsTabState extends NyState<ChatsTab> {
 
       if (response != null && response['chats'] != null) {
         List<dynamic> chatsData = response['chats'];
-        List<ChatInfo> chats = chatsData.map((chatData) {
-          return ChatInfo.fromJson(chatData);
+        List<ChatListItem> chats = chatsData.map((chatData) {
+          return ChatListItem.fromJson(chatData);
         }).toList();
 
         if (mounted) {
@@ -1210,16 +1227,19 @@ class _ChatsTabState extends NyState<ChatsTab> {
   }
 
   Widget _buildChatItem({
-    required ChatInfo chat,
+    required ChatListItem chat,
     bool isLastItem = false, // To control whether to show line demarcation
   }) {
-    final name = chat.partnerUsername ?? 'Unknown User';
-    final message = chat.messagePreview;
-    final time = chat.messageTime;
+    final name = chat.name;
+    final message = chat.lastMessage?.text ?? '';
+    final time = formatMessageTime(chat.lastMessage?.createdAt) ?? '';
+
     final isVerified = false; // You can add verification logic later
     final hasUnread = false; // You can add unread logic later
-    final isOnline = false; // You can add online status logic later
-    final imagePath = _getContactAvatar(name); // Use avatar based on username
+    final isOnline = chat.partner?.status == "online";
+    final imagePath = getChatAvatar(
+        chat, getEnv("API_BASE_URL")); // Use avatar based on username
+
     return Column(
       children: [
         GestureDetector(
@@ -1231,8 +1251,8 @@ class _ChatsTabState extends NyState<ChatsTab> {
               'userImage': imagePath,
               'isOnline': isOnline,
               'isVerified': isVerified,
-              'partnerId': chat.partnerIdInt,
-              'partnerUsername': chat.partnerUsername,
+              'partnerId': chat.partner?.id,
+              'partnerUsername': chat.partner?.username,
               'existingChat': true, // Indicate this is an existing chat
             });
           },
@@ -1252,12 +1272,12 @@ class _ChatsTabState extends NyState<ChatsTab> {
                       ),
                       child: imagePath != null
                           ? ClipOval(
-                              child: Image.asset(
+                              child: Image.network(
                                 imagePath,
                                 width: 54,
                                 height: 54,
                                 fit: BoxFit.cover,
-                              ).localAsset(),
+                              ),
                             )
                           : Icon(
                               Icons.person,

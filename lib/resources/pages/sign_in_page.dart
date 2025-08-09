@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_app/resources/pages/base_navigation_hub.dart';
 import 'package:flutter_app/resources/pages/sign_up_email_page.dart';
 import 'package:nylo_framework/nylo_framework.dart';
 import '/app/networking/auth_api_service.dart';

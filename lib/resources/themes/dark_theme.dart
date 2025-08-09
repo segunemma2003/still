@@ -27,9 +27,9 @@ ThemeData darkTheme(ColorStyles color) {
         color: Color(0xFFE8E7EA),
         fontFamily: 'PlusJakartaSans',
       ),
-      dayForegroundColor: MaterialStateProperty.resolveWith<Color?>(
-          (Set<MaterialState> states) {
-        if (states.contains(MaterialState.selected)) {
+      dayForegroundColor:
+          WidgetStateProperty.resolveWith<Color?>((Set<WidgetState> states) {
+        if (states.contains(WidgetState.selected)) {
           return Colors.black; // Color for selected date
         }
         return Color(0xFFE8E7EA); // Color for unselected dates
