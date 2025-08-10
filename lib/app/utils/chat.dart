@@ -1,4 +1,4 @@
-import 'package:flutter_app/app/models/chat_list_item.dart';
+import 'package:flutter_app/app/models/chat.dart';
 
 String? formatTime(DateTime? time) {
   if (time == null) return null;
@@ -22,7 +22,7 @@ String? formatMessageTime(DateTime? time) {
   return "${time.hour}:${time.minute.toString().padLeft(2, '0')}";
 }
 
-String? getChatAvatar(ChatListItem chat, String baseUrl) {
+String? getChatAvatar(Chat chat, String baseUrl) {
   String? avatar;
 
   if (chat.type == "PRIVATE") {

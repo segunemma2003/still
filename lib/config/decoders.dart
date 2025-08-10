@@ -1,8 +1,8 @@
 import '/app/controllers/home_controller.dart';
 import '/app/models/chat.dart';
-import '/app/models/chat_list_item.dart';
 import '/app/models/user.dart';
 import '/app/models/chat_list_response.dart';
+import '/app/models/chat_messages_response.dart';
 import '/app/models/search_char_response.dart';
 import '/app/models/chat_creation_response.dart';
 import '/app/networking/api_service.dart';
@@ -20,17 +20,17 @@ import '/app/networking/chat_api_service.dart';
 final Map<Type, dynamic> modelDecoders = {
   User: (data) => User.fromJson(data),
   Chat: (data) => Chat.fromJson(data),
+  // Chat?: (data) => data != null ? Chat.fromJson(data) : null,
+
   List<Chat>: (data) =>
       List.from(data).map((json) => Chat.fromJson(json)).toList(),
-  ChatListItem: (data) => ChatListItem.fromJson(data),
-  List<ChatListItem>: (data) =>
-      List.from(data).map((json) => ChatListItem.fromJson(json)).toList(),
   ChatListResponse: (data) => ChatListResponse.fromJson(data),
   List<Map<String, dynamic>>: (data) => List<Map<String, dynamic>>.from(data),
   SearchUser: (data) => SearchUser.fromJson(data),
   List<SearchUser>: (data) =>
       List.from(data).map((json) => SearchUser.fromJson(json)).toList(),
   ChatCreationResponse: (data) => ChatCreationResponse.fromJson(data),
+  ChatMessagesResponse: (data) => ChatMessagesResponse.fromJson(data),
   // To handle nullable lists, decode as List<SearchUser> and handle nulls outside the decoder.
   // SearchCharResponse: (data) => SearchCharResponse.fromJson(data),
 };

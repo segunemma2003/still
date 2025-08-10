@@ -9,7 +9,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:nylo_framework/nylo_framework.dart';
-import '/app/models/chat_list_item.dart';
+import '/app/models/chat.dart';
 import '/app/networking/chat_api_service.dart';
 import '/app/networking/websocket_service.dart';
 import '/resources/pages/video_call_page.dart';
@@ -17,6 +17,7 @@ import '/resources/pages/voice_call_page.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:file_picker/file_picker.dart';
 import "../../app/utils/chat.dart";
+import "/app/services/chat_service.dart";
 
 class ChatScreenPage extends NyStatefulWidget {
   static RouteView path = ("/chat-screen", (_) => ChatScreenPage());
@@ -33,17 +34,18 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
   bool _hasText = false;
 
   // Chat data
-  ChatListItem? _chat;
+  Chat? _chat;
   String _userName = 'Ahmad';
   String? _userImage;
   bool _isOnline = false;
   bool _isVerified = false;
-  bool _isTyping = false;
   Set<int> _typingUsers = {};
 
   // WebSocket integration
   StreamSubscription<Map<String, dynamic>>? _wsSubscription;
   StreamSubscription<Map<String, dynamic>>? _notificationSubscription;
+  StreamSubscription<Chat>? _chatSubscription;
+
   bool _isWebSocketConnected = false;
 
   List<Message> _messages = [];
@@ -51,8 +53,21 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
   @override
   get init => () async {
         _messageController.addListener(_onTextChanged);
-        // _messageController.addListener(listener)
-        // Get current user id from Auth
+
+        ChatService().chatStream.listen((chat) {
+          if (!mounted) return; // Ensure widget is still mounted
+          if (chat.id == _chat?.id) {
+            setState(() {
+              _chat = chat;
+              _userName = chat.name;
+              _userImage = getChatAvatar(chat, getEnv("API_BASE_URL"));
+              _isOnline = chat.partner?.status == "online";
+              _typingUsers = chat.typingUsers;
+              ;
+            });
+          }
+        });
+
         try {
           final userData = await Auth.data();
           print("User data: $userData"); // Debug
@@ -74,22 +89,28 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
 
           // Load previous messages if we have a chat
           if (chatId != null) {
-            _chat = await apiService.getChatDetails(chatId: chatId);
-            print('Chat loaded: ${_chat?.name}');
+            _chat = await ChatService().getChatDetails(chatId);
+            final messages = await ChatService().getChatMessages(chatId);
+
+            // print("Total messages: ${_chat?.messages.length}");
+            // _chat = await apiService.getChatDetails(chatId: chatId);
+            // print('Chat loaded: ${_chat?.name}');
             if (_chat != null) {
               if (_chat!.type == 'PRIVATE' && _chat!.partner != null) {
                 _userName = _chat!.name;
                 _userImage = getChatAvatar(_chat!, getEnv("API_BASE_URL"));
                 _isOnline = _chat!.partner!.status == "online";
+                _typingUsers = _chat!.typingUsers;
               } else {
-                _userName = _chat!.name ?? 'Group';
+                _userName = _chat!.name;
                 _userImage = getChatAvatar(_chat!, getEnv("API_BASE_URL"));
                 _isOnline = false;
                 _isVerified = false;
+                _typingUsers = _chat!.typingUsers;
               }
             }
             setState(() {
-              _messages = _chat?.messages ?? [];
+              _messages = messages;
             });
 
             _scrollToBottom();
@@ -531,9 +552,9 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
                               ),
                             ),
                           ),
-                          // TODO: Change chack to Navigator.pop
-                          // onPressed: () => Navigator.pop(context),
-                          onPressed: () => routeToAuthenticatedRoute(),
+
+                          onPressed: () => Navigator.pop(context),
+                          // onPressed: () => routeToAuthenticatedRoute(),
                         ),
                         Container(
                           width: 32,

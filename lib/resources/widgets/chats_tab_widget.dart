@@ -3,7 +3,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_app/app/models/chat_list_item.dart';
+import 'package:flutter_app/app/models/chat.dart';
 import 'package:flutter_app/app/models/contact_info.dart';
 import 'package:flutter_app/app/models/message.dart';
 import 'package:flutter_app/resources/widgets/alphabet_scroll_view_widget.dart';
@@ -17,6 +17,7 @@ import '../../app/models/chat_creation_response.dart';
 import '../pages/chat_screen_page.dart';
 import '../../app/networking/websocket_service.dart';
 import "../../app/utils/chat.dart";
+import "/app/services/chat_service.dart";
 
 class ChatsTab extends StatefulWidget {
   const ChatsTab({super.key});
@@ -28,13 +29,14 @@ class ChatsTab extends StatefulWidget {
 class _ChatsTabState extends NyState<ChatsTab> {
   List<ContactInfo> contactList = [];
   List<ContactInfo> filteredContactList = [];
-  List<ChatListItem> chatList = [];
+  List<Chat> chatList = [];
   List<UserInfo> searchResults = [];
   List<String> recentSearches = [];
   Map<String, List<UserInfo>> searchCache = {};
   bool isLoadingContacts = false; // Keep for internal logic
   bool isSearching = false;
   bool showSearchResults = false;
+  int? _currentUserId;
   TextEditingController searchController = TextEditingController();
   Timer? _searchDebounceTimer;
 
@@ -42,11 +44,15 @@ class _ChatsTabState extends NyState<ChatsTab> {
   StreamSubscription<Map<String, dynamic>>? _wsSubscription;
   StreamSubscription<Map<String, dynamic>>? _msgStream;
   StreamSubscription<bool>? _connectionSubscription;
+
+  StreamSubscription<List<Chat>>? _chatListSubscription;
+
   @override
   get init => () {
-        _initializeWebSocket();
+        _initializeChatService();
+        // _initializeWebSocket();
         _initContactList();
-        _loadRecentChats();
+
         _preloadCommonSearches();
       };
 
@@ -56,8 +62,25 @@ class _ChatsTabState extends NyState<ChatsTab> {
     _searchDebounceTimer?.cancel();
     _wsSubscription?.cancel();
     _msgStream?.cancel();
+    _chatListSubscription?.cancel();
     _connectionSubscription?.cancel();
     super.dispose();
+  }
+
+  Future<void> _initializeChatService() async {
+    final userData = await Auth.data();
+    _currentUserId = userData?['id'];
+
+    await ChatService().initialize();
+    _loadRecentChats();
+    _chatListSubscription?.cancel();
+    _chatListSubscription = ChatService().chatListStream.listen((chats) {
+      if (mounted) {
+        setState(() {
+          chatList = chats;
+        });
+      }
+    });
   }
 
   Future<void> _initializeWebSocket() async {
@@ -565,40 +588,13 @@ class _ChatsTabState extends NyState<ChatsTab> {
   // Load recent chats from API (silent loading like WhatsApp)
   Future<void> _loadRecentChats() async {
     try {
+      final List<Chat> chats = await ChatService().loadChatList();
+      if (mounted) {
+        setState(() {
+          chatList = chats;
+        });
+      }
       // Check if user is authenticated
-      Map<String, dynamic>? userData = await Auth.data();
-      if (userData == null || userData['accessToken'] == null) {
-        print('User not authenticated, skipping chat load');
-        return;
-      }
-
-      // Create API service
-      ChatApiService apiService = ChatApiService(buildContext: context);
-
-      // Fetch recent chats
-      Map<String, dynamic>? response = await apiService.getRecentChats(
-        page: 1,
-        pageSize: 20,
-      );
-
-      if (response != null && response['chats'] != null) {
-        List<dynamic> chatsData = response['chats'];
-        List<ChatListItem> chats = chatsData.map((chatData) {
-          return ChatListItem.fromJson(chatData);
-        }).toList();
-
-        if (mounted) {
-          setState(() {
-            chatList = chats;
-          });
-        }
-      } else {
-        if (mounted) {
-          setState(() {
-            chatList = [];
-          });
-        }
-      }
     } catch (e) {
       print('Error loading recent chats: $e');
     }
@@ -1227,15 +1223,23 @@ class _ChatsTabState extends NyState<ChatsTab> {
   }
 
   Widget _buildChatItem({
-    required ChatListItem chat,
+    required Chat chat,
     bool isLastItem = false, // To control whether to show line demarcation
   }) {
     final name = chat.name;
     final message = chat.lastMessage?.text ?? '';
     final time = formatMessageTime(chat.lastMessage?.createdAt) ?? '';
+    final isTyping = chat.typingUsers.isNotEmpty;
 
+    final typingMessage = isTyping
+        ? (chat.typingUsers.length == 1
+            ? 'Typing...'
+            : '${chat.typingUsers.length} are typing')
+        : null;
+
+    print("chat.typingUsers: ${chat.typingUsers}");
     final isVerified = false; // You can add verification logic later
-    final hasUnread = false; // You can add unread logic later
+    final hasUnread = true; // You can add unread logic later
     final isOnline = chat.partner?.status == "online";
     final imagePath = getChatAvatar(
         chat, getEnv("API_BASE_URL")); // Use avatar based on username
@@ -1336,14 +1340,41 @@ class _ChatsTabState extends NyState<ChatsTab> {
                         ],
                       ),
                       const SizedBox(height: 4),
-                      Text(
-                        message,
-                        style: TextStyle(
-                            color: Colors.grey.shade400,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w500),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
+                      Row(
+                        children: [
+                          if (chat.lastMessage != null &&
+                              !isTyping &&
+                              chat.lastMessage!.senderId == _currentUserId)
+                            Icon(
+                              chat.lastMessage!.isRead == true
+                                  ? Icons.done_all
+                                  : Icons.check,
+                              size: 16,
+                              color: chat.lastMessage!.isRead == true
+                                  ? Color(0xFF57A1FF)
+                                  : Colors.grey.shade500,
+                            ),
+                          if (chat.lastMessage != null) SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              isTyping && typingMessage != null
+                                  ? typingMessage
+                                  : message,
+                              style: TextStyle(
+                                color: isTyping
+                                    ? Color(0xFF57A1FF)
+                                    : Colors.grey.shade400,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w500,
+                                fontStyle: isTyping
+                                    ? FontStyle.italic
+                                    : FontStyle.normal,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),

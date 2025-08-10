@@ -115,14 +115,6 @@ class WebSocketService {
           (data) => _handleIncomingMessage('typing', jsonEncode(data)));
       _socket!.on('read_receipt',
           (data) => _handleIncomingMessage('read_receipt', jsonEncode(data)));
-
-      // Catch-all listener for debugging
-      // _socket!.onAny((event, data) {
-      //   print('🎯 Received ANY event: $event with data: $data');
-      //   if (event.startsWith('message') || event.contains('message')) {
-      //     _handleIncomingMessage(event, jsonEncode(data));
-      //   }
-      // });
     } catch (e) {
       _isConnecting = false;
       _handleError(e);

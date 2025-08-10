@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_app/app/models/chat_messages_response.dart';
 import 'package:nylo_framework/nylo_framework.dart';
-import '/app/models/chat_list_item.dart';
+import '/app/models/chat.dart';
 import '/app/networking/api_service.dart';
 import "/app/models/chat_list_response.dart";
 import "/app/models/search_char_response.dart";
@@ -39,8 +40,8 @@ class ChatApiService extends ApiService {
   }
 
   /// Create or get a private chat with a partner
-  Future<ChatListItem?> createPrivateChat({required int partnerId}) async {
-    return await network<ChatListItem>(
+  Future<Chat?> createPrivateChat({required int partnerId}) async {
+    return await network<Chat?>(
       request: (request) => request.post(
         "/chat",
         data: {
@@ -79,17 +80,18 @@ class ChatApiService extends ApiService {
   }
 
   /// Get chat messages (for loading previous messages)
-  Future<List<Map<String, dynamic>>?> getChatMessages({
-    required int chatId,
-    int? limit = 50,
-    int? offset = 0,
-  }) async {
-    return await network<List<Map<String, dynamic>>>(
+  Future<ChatMessagesResponse?> getChatMessages(
+      {required int chatId,
+      int? limit = 50,
+      int? pageSize = 0,
+      int? messageId}) async {
+    return await network<ChatMessagesResponse>(
       request: (request) => request.get(
         "/chat/$chatId/messages",
         queryParameters: {
-          if (limit != null) 'limit': limit,
-          if (offset != null) 'offset': offset,
+          if (limit != null) 'pageSize': limit,
+          if (pageSize != null) 'pageSize': pageSize,
+          if (messageId != null) 'messageId': messageId,
         },
       ),
     );
@@ -126,8 +128,8 @@ class ChatApiService extends ApiService {
   }
 
   /// Get chat details
-  Future<ChatListItem?> getChatDetails({required int chatId}) async {
-    return await network<ChatListItem>(
+  Future<Chat?> getChatDetails({required int chatId}) async {
+    return await network<Chat>(
       request: (request) => request.get("/chat/$chatId"),
     );
   }
@@ -140,8 +142,8 @@ class ChatApiService extends ApiService {
   }
 
   /// Search chats
-  Future<List<ChatListItem>?> searchChats({required String query}) async {
-    return await network<List<ChatListItem>>(
+  Future<List<Chat>?> searchChats({required String query}) async {
+    return await network<List<Chat>>(
       request: (request) => request.get(
         "/chat/search",
         queryParameters: {"q": query},

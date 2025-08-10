@@ -3,7 +3,7 @@ class Partner {
   final String username;
   final String? firstName;
   final String? lastName;
-  final String? status;
+  String? status;
   final String? avatar;
   Partner({
     required this.id,

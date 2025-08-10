@@ -1,11 +1,11 @@
-import 'chat_list_item.dart';
+import 'chat.dart';
 
 class ChatListResponse {
   final int page;
   final int pageSize;
   final int total;
   final int totalPages;
-  final List<ChatListItem> chats;
+  final List<Chat> chats;
 
   ChatListResponse({
     required this.page,
@@ -21,8 +21,7 @@ class ChatListResponse {
       pageSize: json['pageSize'],
       total: json['total'],
       totalPages: json['totalPages'],
-      chats:
-          (json['chats'] as List).map((c) => ChatListItem.fromJson(c)).toList(),
+      chats: (json['chats'] as List).map((c) => Chat.fromJson(c)).toList(),
     );
   }
 
@@ -31,7 +30,7 @@ class ChatListResponse {
     int? pageSize,
     int? total,
     int? totalPages,
-    List<ChatListItem>? chats,
+    List<Chat>? chats,
   }) {
     return ChatListResponse(
       page: page ?? this.page,
