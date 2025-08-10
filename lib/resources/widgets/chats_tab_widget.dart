@@ -1239,7 +1239,7 @@ class _ChatsTabState extends NyState<ChatsTab> {
 
     print("chat.typingUsers: ${chat.typingUsers}");
     final isVerified = false; // You can add verification logic later
-    final hasUnread = true; // You can add unread logic later
+    final hasUnread = false; // You can add unread logic later
     final isOnline = chat.partner?.status == "online";
     final imagePath = getChatAvatar(
         chat, getEnv("API_BASE_URL")); // Use avatar based on username
