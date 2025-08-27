@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_app/app/models/user.dart';
 import 'package:nylo_framework/nylo_framework.dart';
+import '/app/networking/auth_api_service.dart';
 
 class EmailVerificationBottomSheet extends StatefulWidget {
   final String email;
@@ -12,7 +14,8 @@ class EmailVerificationBottomSheet extends StatefulWidget {
 }
 
 class _EmailVerificationBottomSheetState
-    extends NyState<EmailVerificationBottomSheet> {
+    extends NyState<EmailVerificationBottomSheet>
+    with HasApiService<AuthApiService> {
   final List<TextEditingController> _controllers =
       List.generate(4, (index) => TextEditingController());
   final List<FocusNode> _focusNodes = List.generate(4, (index) => FocusNode());
@@ -242,7 +245,7 @@ class _EmailVerificationBottomSheetState
     }
   }
 
-  void _verifyCode() {
+  Future<void> _verifyCode() async {
     String code = _controllers.map((controller) => controller.text).join();
 
     if (code.length != 4) {
@@ -253,8 +256,22 @@ class _EmailVerificationBottomSheetState
     print('Email verification code: $code for ${widget.email}');
 
     // Close bottom sheet and navigate to home or success
-    Navigator.pop(context);
-    _showSnackBar('Code verified successfully!', isError: false);
+    var apiService = AuthApiService();
+    User? user = await apiService.loginUser(
+      email: widget.email,
+      otp: code,
+    );
+    if (user == null || user.accessToken == null) {
+      _showSnackBar('Invalid verification code. Please try again.');
+      return;
+    }
+    await Auth.authenticate(data: user.toJson());
+    _showSnackBar('Login successful!', isError: false);
+    Future.delayed(const Duration(seconds: 1), () {
+      routeToAuthenticatedRoute();
+    });
+    // Navigator.pop(context);
+    // _showSnackBar('Code verified successfully!', isError: false);
     // Add your navigation logic here
   }
 

@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_app/app/models/user.dart';
+import 'package:nylo_framework/nylo_framework.dart';
+import '/app/networking/auth_api_service.dart';
 
 class PhoneVerificationBottomSheet extends StatefulWidget {
   final String phone;
@@ -12,7 +15,8 @@ class PhoneVerificationBottomSheet extends StatefulWidget {
 }
 
 class _PhoneVerificationBottomSheetState
-    extends State<PhoneVerificationBottomSheet> {
+    extends State<PhoneVerificationBottomSheet>
+    with HasApiService<AuthApiService> {
   final List<TextEditingController> _controllers =
       List.generate(4, (index) => TextEditingController());
   final List<FocusNode> _focusNodes = List.generate(4, (index) => FocusNode());
@@ -237,7 +241,7 @@ class _PhoneVerificationBottomSheetState
     }
   }
 
-  void _verifyCode() {
+  Future<void> _verifyCode() async {
     String code = _controllers.map((controller) => controller.text).join();
 
     if (code.length != 4) {
@@ -246,10 +250,23 @@ class _PhoneVerificationBottomSheetState
     }
 
     print('Phone verification code: $code for ${widget.phone}');
-
+    var apiService = AuthApiService();
+    User? user = await apiService.loginUser(
+      phone: widget.phone,
+      otp: code,
+    );
+    if (user == null || user.accessToken == null) {
+      _showSnackBar('Invalid verification code. Please try again.');
+      return;
+    }
+    await Auth.authenticate(data: user.toJson());
+    _showSnackBar('Login successful!', isError: false);
+    Future.delayed(const Duration(seconds: 1), () {
+      routeToAuthenticatedRoute();
+    });
     // Close bottom sheet and navigate to home or success
-    Navigator.pop(context);
-    _showSnackBar('Code verified successfully!', isError: false);
+    // Navigator.pop(context);
+    // _showSnackBar('Code verified successfully!', isError: false);
     // Add your navigation logic here
   }
 
