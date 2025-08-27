@@ -6,6 +6,7 @@ import '/app/networking/api_service.dart';
 import "/app/models/chat_list_response.dart";
 import "/app/models/search_char_response.dart";
 import "/app/models/chat_creation_response.dart";
+import "/app/models/call_models.dart";
 
 class ChatApiService extends ApiService {
   ChatApiService({BuildContext? buildContext})
@@ -47,6 +48,28 @@ class ChatApiService extends ApiService {
         data: {
           "type": "PRIVATE",
           "partnerId": partnerId.toString(),
+        },
+      ),
+    );
+  }
+
+  Future<CallResponse?> initiateVoiceCall(int chatId) async {
+    return await network<CallResponse>(
+      request: (request) => request.post(
+        "/call/voice-call",
+        data: {
+          "chatId": chatId,
+        },
+      ),
+    );
+  }
+
+  Future<CallResponse?> joinVoiceCall(int chatId) async {
+    return await network<CallResponse>(
+      request: (request) => request.post(
+        "/call/voice-call/join",
+        data: {
+          "chatId": chatId,
         },
       ),
     );

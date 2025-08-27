@@ -649,7 +649,12 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
                             ),
                             const SizedBox(width: 12), // Exact spacing you want
                             GestureDetector(
-                              onTap: () => routeTo(VoiceCallPage.path),
+                              onTap: () => routeTo(VoiceCallPage.path, data: {
+                                "partner": _chat?.partner?.toJson(),
+                                "isGroup": _chat?.type == 'CHANNEL',
+                                "chatId": _chat?.id,
+                                "initiateCall": true,
+                              }),
                               child: Container(
                                 width: 18,
                                 height: 18,

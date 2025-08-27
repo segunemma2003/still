@@ -238,6 +238,11 @@ class ChatService {
         case 'chat:new':
           _handleNewChat(notificationData);
           break;
+
+        case "join:call":
+          _handleJoinCall(notificationData);
+          break;
+
         default:
           print('🔔 Unhandled notification: $action');
       }
@@ -258,6 +263,46 @@ class ChatService {
       }
     } catch (e) {
       print('❌ Error handling new chat: $e');
+    }
+  }
+
+  /// Handle incoming call notification
+  void _handleJoinCall(Map<String, dynamic> data) async {
+    try {
+      final int callerId = data['callerId'];
+      final int chatId = data['chatId'];
+
+      print('📞 Incoming call from user $callerId in chat $chatId');
+      final userData = await Auth.data();
+      final int currentUserId = userData['id'];
+      print('Current user ID: $currentUserId');
+
+      if (callerId == currentUserId) {
+        // Ignore if the caller is the current user
+        return;
+      }
+      // Get chat details to show caller info
+      final chat = await getChatDetails(chatId);
+
+      if (chat != null) {
+        // Navigate to voice call page with joining data
+        await routeTo(
+          "/voice-call",
+          data: {
+            'isGroup': false,
+            'partner': {
+              'username': chat.partner?.username ?? 'Unknown',
+              'avatar': chat.partner?.avatar ?? 'default_avatar.png',
+            },
+            'chatId': chatId,
+            'callerId': callerId,
+            'initiateCall': false, // This indicates joining, not initiating
+            'isJoining': true, // Flag to indicate this is an incoming call
+          },
+        );
+      }
+    } catch (e) {
+      print('❌ Error handling join call: $e');
     }
   }
 

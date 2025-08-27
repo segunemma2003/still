@@ -1,7 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_app/app/networking/chat_api_service.dart';
 import 'package:nylo_framework/nylo_framework.dart';
 import 'dart:async';
+import 'package:livekit_client/livekit_client.dart';
+
+// ✅ Call states for tracking call progress
+enum CallState { requesting, ringing, connected }
+
+// ✅ Call types supported
+enum CallType { single, group }
+
+// ✅ Participant data model
+class CallParticipant {
+  final String name;
+  final String image;
+  final bool isSelf;
+
+  CallParticipant({
+    required this.name,
+    required this.image,
+    this.isSelf = false,
+  });
+}
 
 class VoiceCallPage extends NyStatefulWidget {
   static RouteView path = ("/voice-call", (_) => VoiceCallPage());
@@ -11,10 +32,11 @@ class VoiceCallPage extends NyStatefulWidget {
 
 class _VoiceCallPageState extends NyPage<VoiceCallPage>
     with TickerProviderStateMixin {
-  CallState _callState = CallState.ringing;
+  CallState _callState = CallState.requesting; // ✅ Start with requesting state
   bool _isMuted = false;
   bool _isSpeaker = false;
   bool _isVideoOn = false;
+  int _callDuration = 0; // ✅ Track call duration in seconds
 
   // Call data - you can pass this as parameters
   CallType _callType =
@@ -23,7 +45,9 @@ class _VoiceCallPageState extends NyPage<VoiceCallPage>
   // Single call data
   String _contactName = "Layla B";
   String _contactImage = "image2.png";
-
+  int? _chatId; // Example chat ID
+  int? _callerId; // ID of the caller (for incoming calls)
+  bool _isJoining = false; // Flag to indicate if joining an incoming call
   // Group call data
   String _groupName = "Our Loving Pets";
   String _groupImage = "image9.png";
@@ -38,7 +62,17 @@ class _VoiceCallPageState extends NyPage<VoiceCallPage>
 
   // Call timer
   Timer? _timer;
-  int _seconds = 0;
+
+  // ✅ LiveKit integration
+  Room? _room;
+  List<RemoteParticipant> _remoteParticipants = [];
+  EventsListener<RoomEvent>? _listener;
+  bool _isConnecting = false; // Prevent simultaneous connection attempts
+
+  // ✅ Room information preservation
+  Map<String, dynamic> _roomInfo = {}; // Store room info for post-call access
+  List<Map<String, dynamic>> _participantHistory =
+      []; // Track all participants who joined
 
   // Animation controllers
   late AnimationController _pulseController;
@@ -48,7 +82,7 @@ class _VoiceCallPageState extends NyPage<VoiceCallPage>
 
   @override
   get init => () {
-        // Initialize animations
+        // Initialize animations first
         _pulseController = AnimationController(
           duration: const Duration(milliseconds: 1000),
           vsync: this,
@@ -75,63 +109,540 @@ class _VoiceCallPageState extends NyPage<VoiceCallPage>
           curve: Curves.easeInOut,
         ));
 
-        // Start animations for ringing state
-        if (_callState == CallState.ringing) {
+        // Start animations for requesting/ringing states
+        if (_callState == CallState.requesting ||
+            _callState == CallState.ringing) {
           _pulseController.repeat(reverse: true);
           _fadeController.repeat(reverse: true);
         }
 
-        // Start call timer when connected
-        Future.delayed(const Duration(seconds: 3), () {
-          setState(() {
-            _callState = CallState.connected;
-          });
-          // Stop ringing animations
-          _pulseController.stop();
-          _fadeController.stop();
-          _pulseController.reset();
-          _fadeController.reset();
-          _startTimer();
-        });
+        // Then extract call data and potentially start the call
+        _extractCallData();
       };
 
-  @override
-  void dispose() {
-    _timer?.cancel();
-    _pulseController.dispose();
-    _fadeController.dispose();
-    super.dispose();
+  void _extractCallData() async {
+    final navigationData = data();
+    print(navigationData);
+
+    if (navigationData != null) {
+      if (navigationData['isGroup'] == true) {
+        _callType = CallType.group;
+        _groupName = navigationData['groupName'] ?? _groupName;
+        _groupImage = navigationData['groupImage'] ?? _groupImage;
+        // _participants = (navigationData['participants'] as List)
+        //     .map((p) => CallParticipant.fromJson(p))
+        //     .toList();
+      } else {
+        _callType = CallType.single;
+        final partner = navigationData['partner'];
+        _contactName = partner['username'] ?? _contactName;
+        _contactImage = partner['avatar'] ?? _contactImage;
+        _chatId = navigationData['chatId'];
+        _callerId =
+            navigationData['callerId']; // Get caller ID for incoming calls
+        _isJoining = navigationData['isJoining'] ??
+            false; // Check if joining incoming call
+        final bool initiateCall = navigationData['initiateCall'] ?? false;
+
+        if (_isJoining) {
+          // For incoming calls, start directly in ringing state
+          setState(() {
+            _callState = CallState.ringing;
+          });
+          _startRingingAnimations();
+
+          // Delay joining the existing call
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              _joinCall();
+            }
+          });
+        } else if (initiateCall) {
+          // Delay call initiation until widget is fully mounted
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              _startCall();
+            }
+          });
+        }
+      }
+    } else {
+      // Delay navigation until after the build is complete
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          routeToAuthenticatedRoute();
+        }
+      });
+    }
   }
 
-  void _startTimer() {
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+  /// ✅ Start call with proper state flow: requesting → ringing → connected
+  void _startCall() async {
+    if (_chatId == null) {
+      print("❌ Chat ID is required to initiate a call.");
+      _showErrorDialog("Chat ID is required to initiate a call.");
+      return;
+    }
+
+    try {
+      // ✅ State 1: Requesting - Getting token from API
       setState(() {
-        _seconds++;
+        _callState = CallState.requesting;
       });
+      _startRequestingAnimations();
+
+      print("🔄 Requesting call token for chat ID: $_chatId");
+
+      ChatApiService chatApiService = ChatApiService();
+      final response = await chatApiService.initiateVoiceCall(_chatId!);
+
+      if (response == null || response.callToken.isEmpty) {
+        print("❌ Failed to get call token. Please try again.");
+        _showErrorDialog("Failed to get call token. Please try again.");
+        return;
+      }
+
+      print("✅ Call token received: ${response.callToken}");
+
+      // ✅ State 2: Ringing - Room setup completed, waiting for other party
+      setState(() {
+        _callState = CallState.ringing;
+      });
+      _startRingingAnimations();
+
+      // Initialize LiveKit room
+      final url = 'ws://127.0.0.1:7880';
+      await _initializeLiveKitRoom(response.callToken, url);
+    } catch (e) {
+      print("❌ Error starting call: $e");
+      _showErrorDialog("Failed to start call: $e");
+    }
+  }
+
+  /// ✅ Join an existing call (for incoming calls)
+  void _joinCall() async {
+    if (_chatId == null) {
+      print("❌ Chat ID is required to join a call.");
+      _showErrorDialog("Chat ID is required to join a call.");
+      return;
+    }
+
+    try {
+      print("🔄 Joining call for chat ID: $_chatId from caller: $_callerId");
+
+      ChatApiService chatApiService = ChatApiService();
+      final response = await chatApiService.joinVoiceCall(_chatId!);
+
+      if (response == null || response.callToken.isEmpty) {
+        print("❌ Failed to get call token for joining. Please try again.");
+        _showErrorDialog("Failed to join call. Please try again.");
+        return;
+      }
+
+      print("✅ Join call token received: ${response.callToken}");
+
+      // Initialize LiveKit room for joining
+      final url = 'ws://127.0.0.1:7880';
+      await _initializeLiveKitRoom(response.callToken, url);
+    } catch (e) {
+      print("❌ Error joining call: $e");
+      _showErrorDialog("Failed to join call: $e");
+    }
+  }
+
+  /// ✅ Start animations for requesting state
+  void _startRequestingAnimations() {
+    _pulseController.repeat(reverse: true);
+    _fadeController.repeat(reverse: true);
+  }
+
+  /// ✅ Start animations for ringing state
+  void _startRingingAnimations() {
+    // Animations continue from requesting state
+    if (!_pulseController.isAnimating) {
+      _pulseController.repeat(reverse: true);
+      _fadeController.repeat(reverse: true);
+    }
+  }
+
+  /// ✅ Stop all animations when connected
+  void _stopAllAnimations() {
+    _pulseController.stop();
+    _fadeController.stop();
+    _pulseController.reset();
+    _fadeController.reset();
+  }
+
+  Future<void> _initializeLiveKitRoom(String token, String url) async {
+    // Prevent simultaneous connection attempts
+    if (_isConnecting) {
+      print("⚠️ Connection attempt already in progress, skipping...");
+      return;
+    }
+
+    try {
+      _isConnecting = true;
+      print("🔄 Setting up LiveKit room...");
+      print("Current room  ${_room}");
+      print("Current room remote: ${_room?.remoteParticipants}");
+      print("Current room local: ${_room?.localParticipant}");
+      // Ensure complete cleanup of any existing room connection
+      await _ensureRoomCleanup();
+
+      // Create fresh room instance
+      _room = Room();
+
+      // Setup event listeners
+      _setupRoomListeners();
+
+      // Connect to room
+      await _room!.connect(
+        url,
+        token,
+        connectOptions: const ConnectOptions(
+          autoSubscribe: true,
+        ),
+      );
+
+      print("✅ LiveKit room setup completed, waiting for participants...");
+
+      // Enable audio by default
+      await _room!.localParticipant?.setMicrophoneEnabled(true);
+    } catch (e) {
+      print("❌ Error setting up LiveKit room: $e");
+      _showErrorDialog("Failed to setup call room: $e");
+    } finally {
+      _isConnecting = false;
+    }
+  }
+
+  /// ✅ Ensure complete cleanup of any existing room connection
+  Future<void> _ensureRoomCleanup() async {
+    if (_room != null) {
+      print("🧹 Cleaning up existing room connection...");
+
+      try {
+        // Stop listening to events first
+        _listener?.cancelAll();
+        _listener?.dispose();
+
+        _listener = null;
+
+        // Disconnect and dispose room
+        await _room!.disconnect();
+        await _room!.dispose();
+
+        // Clear references
+        _room = null;
+        _remoteParticipants.clear();
+
+        print("✅ Room cleanup completed");
+      } catch (e) {
+        print("⚠️ Error during room cleanup: $e");
+        // Force clear references even if cleanup fails
+        _room = null;
+        _listener = null;
+        _remoteParticipants.clear();
+      }
+    }
+
+    // Reset connection flag
+    _isConnecting = false;
+  }
+
+  /// ✅ Capture room information when connected
+  void _captureRoomInfo() {
+    if (_room != null) {
+      _roomInfo = {
+        'roomName': _room!.name,
+        'connectedAt': DateTime.now().toIso8601String(),
+        'localParticipant': {
+          'name': _room!.localParticipant?.name ?? 'Unknown',
+          'sid': _room!.localParticipant?.sid ?? 'Unknown',
+          'identity': _room!.localParticipant?.identity ?? 'Unknown',
+        },
+        'remoteParticipantCount': _room!.remoteParticipants.length,
+        'chatId': _chatId,
+        'callerId': _callerId,
+        'isJoining': _isJoining,
+      };
+
+      print('📊 Room info captured: $_roomInfo');
+    }
+  }
+
+  /// ✅ Capture disconnection information
+  void _captureDisconnectionInfo(String reason) {
+    _roomInfo['disconnectedAt'] = DateTime.now().toIso8601String();
+    _roomInfo['disconnectionReason'] = reason;
+    _roomInfo['callDuration'] = _callDuration;
+    _roomInfo['participantHistory'] = List.from(_participantHistory);
+
+    print('📊 Final room info: $_roomInfo');
+
+    // You can save this to local storage, send to analytics, etc.
+    _saveRoomInfoToAnalytics();
+  }
+
+  /// ✅ Add participant to history tracking
+  void _addParticipantToHistory(Participant participant, String action) {
+    final participantInfo = {
+      'name': participant.name.isEmpty ? 'Unknown' : participant.name,
+      'sid': participant.sid,
+      'identity': participant.identity,
+      'action': action, // 'joined' or 'left'
+      'timestamp': DateTime.now().toIso8601String(),
+    };
+
+    _participantHistory.add(participantInfo);
+    print('👤 Participant $action: ${participant.name}');
+  }
+
+  /// ✅ Save room information for analytics or debugging
+  void _saveRoomInfoToAnalytics() {
+    // Example: Save to local storage, send to server, etc.
+    print('💾 Saving room analytics data...');
+    print('Call Summary:');
+    print('  Duration: ${_formatDuration(_callDuration)}');
+    print('  Participants: ${_participantHistory.length}');
+    print('  Disconnection reason: ${_roomInfo['disconnectionReason']}');
+
+    // You could implement:
+    // - Local storage save
+    // - API call to save call history
+    // - Analytics tracking
+  }
+
+  /// ✅ Get room information (accessible even after call ends)
+  Map<String, dynamic> getRoomInfo() {
+    return Map.from(_roomInfo);
+  }
+
+  /// ✅ Get participant history (accessible even after call ends)
+  List<Map<String, dynamic>> getParticipantHistory() {
+    return List.from(_participantHistory);
+  }
+
+  /// ✅ Setup LiveKit room event listeners
+  void _setupRoomListeners() {
+    _listener = _room!.createListener();
+
+    _listener!
+      ..on<RoomConnectedEvent>((event) {
+        print('✅ Connected to LiveKit room');
+
+        // Capture room information when connected
+        _captureRoomInfo();
+
+        // Check if there are already participants in the room (for joiners)
+        if (_room != null && _room!.remoteParticipants.isNotEmpty) {
+          print('👥 Found existing participants, joining active call');
+          if (mounted) {
+            setState(() {
+              _callState = CallState.connected;
+              _remoteParticipants.addAll(_room!.remoteParticipants.values);
+            });
+            _stopAllAnimations();
+            _startTimer();
+          }
+        } else {
+          print('📞 Room connected, waiting for other participants...');
+          // Stay in ringing state until another participant joins
+        }
+      })
+      ..on<RoomDisconnectedEvent>((event) {
+        print('❌ Disconnected from room: ${event.reason}');
+
+        // Capture final room state before cleanup
+        _captureDisconnectionInfo(event.reason?.toString() ?? 'Unknown');
+
+        if (mounted) {
+          Navigator.pop(context);
+        }
+      })
+      ..on<ParticipantConnectedEvent>((event) {
+        print('👤 Participant connected: ${event.participant.name}');
+
+        // Track participant joining
+        _addParticipantToHistory(event.participant, 'joined');
+
+        // ✅ State 3: Connected - Other party joined the call
+        if (mounted) {
+          setState(() {
+            _callState = CallState.connected;
+            _remoteParticipants.add(event.participant);
+          });
+          _stopAllAnimations();
+          // Only start timer if not already started
+          if (_timer == null) {
+            _startTimer();
+          }
+        }
+      })
+      ..on<ParticipantDisconnectedEvent>((event) {
+        print('👤 Participant disconnected: ${event.participant.name}');
+
+        // Track participant leaving
+        _addParticipantToHistory(event.participant, 'left');
+
+        if (mounted) {
+          setState(() {
+            _remoteParticipants
+                .removeWhere((p) => p.sid == event.participant.sid);
+          });
+
+          // If no remote participants, end the call
+          if (_remoteParticipants.isEmpty &&
+              _callState == CallState.connected) {
+            _endCall();
+          }
+        }
+      })
+      ..on<TrackMutedEvent>((event) {
+        print('🔇 Track muted: ${event.publication.kind}');
+        if (mounted && event.participant is LocalParticipant) {
+          setState(() {
+            _isMuted = !_room!.localParticipant!.isMicrophoneEnabled();
+          });
+        }
+      })
+      ..on<TrackUnmutedEvent>((event) {
+        print('🔊 Track unmuted: ${event.publication.kind}');
+        if (mounted && event.participant is LocalParticipant) {
+          setState(() {
+            _isMuted = !_room!.localParticipant!.isMicrophoneEnabled();
+          });
+        }
+      });
+  }
+
+  /// ✅ Start call duration timer
+  void _startTimer() {
+    // Prevent starting multiple timers
+    if (_timer != null) {
+      return;
+    }
+
+    _timer = Timer.periodic(Duration(seconds: 1), (timer) {
+      if (mounted) {
+        setState(() {
+          _callDuration++;
+        });
+      }
     });
   }
 
-  String _formatDuration() {
-    int hours = _seconds ~/ 3600;
-    int minutes = (_seconds % 3600) ~/ 60;
-    int secs = _seconds % 60;
+  /// ✅ Stop and cleanup timer
+  void _stopTimer() {
+    _timer?.cancel();
+    _timer = null;
+  }
 
-    if (hours > 0) {
-      return "${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}";
-    } else {
-      return "${minutes.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}";
+  /// ✅ Format call duration for display
+  String _formatDuration(int seconds) {
+    final minutes = (seconds / 60).floor();
+    final remainingSeconds = seconds % 60;
+    return '${minutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
+  }
+
+  /// ✅ Mute/unmute microphone
+  Future<void> _toggleMute() async {
+    if (_room?.localParticipant != null) {
+      final enabled = _room!.localParticipant!.isMicrophoneEnabled();
+      await _room!.localParticipant!.setMicrophoneEnabled(!enabled);
+      if (mounted) {
+        setState(() {
+          _isMuted = !enabled;
+        });
+      }
     }
   }
 
+  /// ✅ End the call and navigate back
+  Future<void> _endCall() async {
+    try {
+      _stopTimer();
+      _stopAllAnimations();
+
+      // Capture final room state before cleanup
+      if (_room != null) {
+        _captureDisconnectionInfo('User ended call');
+      }
+
+      // Use our comprehensive cleanup method
+      await _ensureRoomCleanup();
+
+      // Example: Show call summary before leaving
+      _showCallSummary();
+
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+    } catch (e) {
+      print("Error ending call: $e");
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+    }
+  }
+
+  /// ✅ Show call summary with preserved room information
+  void _showCallSummary() {
+    final duration = _formatDuration(_callDuration);
+    final participantCount = _participantHistory.length;
+
+    print('📞 Call Summary:');
+    print('   Duration: $duration');
+    print('   Participants: $participantCount');
+    print('   Room Info: $_roomInfo');
+    print('   Participant History: $_participantHistory');
+
+    // You can show this in a dialog, save to database, etc.
+  }
+
+  /// ✅ Show error dialog and navigate back
+  void _showErrorDialog(String message) {
+    // Ensure widget is mounted and context is available
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && context.mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => AlertDialog(
+            title: Text('Call Error'),
+            content: Text(message),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  Navigator.of(context).pop();
+                },
+                child: Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
+    });
+  }
+
+  /// ✅ Get call status text based on current state
   String _getCallStatusText() {
     switch (_callState) {
+      case CallState.requesting:
+        return _isJoining ? "Joining call..." : "Requesting call...";
       case CallState.ringing:
-        return _callType == CallType.group ? "Calling Group..." : "Ringing...";
+        if (_callType == CallType.group) {
+          return _isJoining ? "Joining Group..." : "Calling Group...";
+        } else {
+          return _isJoining ? "Incoming call..." : "Ringing...";
+        }
       case CallState.connected:
-        return _formatDuration();
+        return _formatDuration(_callDuration);
     }
   }
 
+  /// ✅ Build animated timer/status text
   Widget _buildAnimatedTimer() {
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 500),
@@ -149,6 +660,24 @@ class _VoiceCallPageState extends NyPage<VoiceCallPage>
         ),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    // Ensure proper cleanup on widget disposal
+    _stopTimer();
+    _stopAllAnimations();
+
+    // Clean up room connection asynchronously
+    _ensureRoomCleanup().then((_) {
+      print("🧹 Widget disposal cleanup completed");
+    }).catchError((e) {
+      print("⚠️ Error during widget disposal cleanup: $e");
+    });
+
+    _pulseController.dispose();
+    _fadeController.dispose();
+    super.dispose();
   }
 
   @override
@@ -590,10 +1119,8 @@ class _VoiceCallPageState extends NyPage<VoiceCallPage>
             icon: _isMuted ? Icons.mic_off : Icons.mic,
             label: "Mute",
             isActive: _isMuted,
-            onTap: () {
-              setState(() {
-                _isMuted = !_isMuted;
-              });
+            onTap: () async {
+              await _toggleMute();
               HapticFeedback.lightImpact();
             },
           ),
@@ -604,9 +1131,9 @@ class _VoiceCallPageState extends NyPage<VoiceCallPage>
             label: "End Call",
             isActive: false,
             isEndCall: true,
-            onTap: () {
+            onTap: () async {
               HapticFeedback.lightImpact();
-              Navigator.pop(context);
+              await _endCall();
             },
           ),
         ],
@@ -655,20 +1182,4 @@ class _VoiceCallPageState extends NyPage<VoiceCallPage>
       ),
     );
   }
-}
-
-enum CallState { ringing, connected }
-
-enum CallType { single, group }
-
-class CallParticipant {
-  final String name;
-  final String image;
-  final bool isSelf;
-
-  CallParticipant({
-    required this.name,
-    required this.image,
-    this.isSelf = false,
-  });
 }

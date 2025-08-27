@@ -190,6 +190,7 @@ class WebSocketService {
         case 'chat_list_update':
           _chatListController.add(messageData);
           break;
+
         default:
           print('Unknown message type: $type');
       }
