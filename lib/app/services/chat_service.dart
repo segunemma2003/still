@@ -115,7 +115,7 @@ class ChatService {
       // Fetch initial messages from API
       final apiService = ChatApiService();
       final messagesResponse =
-          await apiService.getChatMessages(chatId: chatId, pageSize: 20);
+          await apiService.getChatMessages(chatId: chatId, limit: 50);
 
       if (messagesResponse?.messages.isNotEmpty == true) {
         // Insert fetched messages at the start of the list
@@ -132,6 +132,33 @@ class ChatService {
       _hasLoadInitialMessages[chatId] = true;
     }
     return _chatMessages[chatId] ?? [];
+  }
+
+  /// Load previous messages for a chat given the last message ID
+  Future<List<Message>> loadPreviousMessages(
+      int chatId, int lastMessageId) async {
+    try {
+      final apiService = ChatApiService();
+      final messagesResponse = await apiService.getChatMessages(
+          chatId: chatId, limit: 20, messageId: lastMessageId);
+
+      if (messagesResponse?.messages.isNotEmpty == true) {
+        // Insert fetched messages at the start of the existing list
+        if (_chatMessages.containsKey(chatId)) {
+          _chatMessages[chatId]!.insertAll(0, messagesResponse!.messages);
+        } else {
+          _chatMessages[chatId] =
+              List<Message>.from(messagesResponse!.messages);
+        }
+
+        return messagesResponse!.messages;
+      }
+
+      return [];
+    } catch (e) {
+      print('❌ Error loading previous messages: $e');
+      return [];
+    }
   }
 
   /// Add message to chat

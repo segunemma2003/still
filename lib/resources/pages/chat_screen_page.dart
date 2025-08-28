@@ -50,9 +50,11 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
 
   List<Message> _messages = [];
   int? _currentUserId;
+  bool _isLoadingAtTop = false; // Track loading state when at top
   @override
   get init => () async {
         _messageController.addListener(_onTextChanged);
+        _scrollController.addListener(_onScroll);
 
         ChatService().chatStream.listen((chat) {
           if (!mounted) return; // Ensure widget is still mounted
@@ -177,6 +179,43 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
         _isWebSocketConnected = false;
       }
     }
+  }
+
+  // Handle scroll events to detect when user reaches the top
+  void _onScroll() {
+    if (_scrollController.hasClients) {
+      // Check if user has scrolled to the top (within 100 pixels from the top)
+      if (_scrollController.position.pixels <= 100 && !_isLoadingAtTop) {
+        print("At the top");
+        _loadMoreMessagesAtTop();
+      }
+    }
+  }
+
+  // Load more messages when user scrolls to top
+  Future<void> _loadMoreMessagesAtTop() async {
+    if (_isLoadingAtTop) return;
+
+    setState(() {
+      _isLoadingAtTop = true;
+    });
+
+    print("🔄 Loading more messages from top...");
+
+    // Simulate loading delay (replace with actual API call)
+    // await Future.delayed(const Duration(seconds: 2));
+    var chatService = ChatService();
+    final List<Message> messages =
+        await chatService.loadPreviousMessages(_chat!.id, _messages.first.id);
+
+    // Here you would typically load older messages from your API
+    // For now, we'll just simulate the loading completion
+    setState(() {
+      _isLoadingAtTop = false;
+      _messages.insertAll(0, messages);
+    });
+
+    print("✅ Finished loading messages from top");
   }
 
   // Handle incoming notifications
@@ -383,6 +422,7 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
   @override
   void dispose() {
     _messageController.removeListener(_onTextChanged);
+    _scrollController.removeListener(_onScroll);
     _messageController.dispose();
     _scrollController.dispose();
 
@@ -696,13 +736,43 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
                         child: RefreshIndicator(
                           onRefresh: () async {
                             print('🔄 Pull to refresh triggered');
-                            await _loadPreviousMessages();
+                            // await _loadPreviousMessages();
                           },
                           child: ListView.builder(
                             controller: _scrollController,
-                            itemCount: _messages.length,
+                            itemCount:
+                                _messages.length + (_isLoadingAtTop ? 1 : 0),
                             itemBuilder: (context, index) {
-                              return _buildMessage(_messages[index]);
+                              // Show loading indicator at the top
+                              if (index == 0 && _isLoadingAtTop) {
+                                return Container(
+                                  padding: const EdgeInsets.all(16),
+                                  child: Center(
+                                    child: Column(
+                                      children: [
+                                        CircularProgressIndicator(
+                                          color: Color(0xFF3498DB),
+                                          strokeWidth: 2,
+                                        ),
+                                        // const SizedBox(height: 8),
+                                        // Text(
+                                        //   'Loading more messages...',
+                                        //   style: TextStyle(
+                                        //     color: Color(0xFFE8E7EA)
+                                        //         .withOpacity(0.7),
+                                        //     fontSize: 12,
+                                        //   ),
+                                        // ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              }
+
+                              // Adjust index if loading indicator is shown
+                              final messageIndex =
+                                  _isLoadingAtTop ? index - 1 : index;
+                              return _buildMessage(_messages[messageIndex]);
                             },
                           ),
                         ),

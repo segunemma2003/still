@@ -104,16 +104,12 @@ class ChatApiService extends ApiService {
 
   /// Get chat messages (for loading previous messages)
   Future<ChatMessagesResponse?> getChatMessages(
-      {required int chatId,
-      int? limit = 50,
-      int? pageSize = 0,
-      int? messageId}) async {
+      {required int chatId, int? limit = 50, int? messageId}) async {
     return await network<ChatMessagesResponse>(
       request: (request) => request.get(
         "/chat/$chatId/messages",
         queryParameters: {
           if (limit != null) 'pageSize': limit,
-          if (pageSize != null) 'pageSize': pageSize,
           if (messageId != null) 'messageId': messageId,
         },
       ),
