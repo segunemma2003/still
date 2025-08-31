@@ -205,7 +205,7 @@ class _ProfileDetailsPageState extends NyPage<ProfileDetailsPage> {
 
   Widget _buildActionButtons() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 32),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 32),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [

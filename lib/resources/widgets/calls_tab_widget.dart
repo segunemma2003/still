@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_app/resources/pages/video_call_page.dart';
 import 'package:flutter_app/resources/pages/voice_call_page.dart';
+import 'package:flutter_app/resources/pages/profile_details_page.dart';
 import 'package:nylo_framework/nylo_framework.dart';
 
 class CallsTab extends StatefulWidget {
@@ -259,18 +260,28 @@ class _CallsTabState extends NyState<CallsTab> {
         children: [
           Stack(
             children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.grey.shade700,
-                ),
-                child: ClipOval(
-                  child: Image.asset(
-                    contact.image,
-                    fit: BoxFit.cover,
-                  ).localAsset(),
+              GestureDetector(
+                onTap: () {
+                  // Navigate to profile details page
+                  routeTo(ProfileDetailsPage.path, data: {
+                    'userName': contact.name,
+                    'userImage': contact.image,
+                    'isOnline': contact.isOnline,
+                  });
+                },
+                child: Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.grey.shade700,
+                  ),
+                  child: ClipOval(
+                    child: Image.asset(
+                      contact.image,
+                      fit: BoxFit.cover,
+                    ).localAsset(),
+                  ),
                 ),
               ),
               if (contact.isOnline)
@@ -360,18 +371,27 @@ class _CallsTabState extends NyState<CallsTab> {
       margin: const EdgeInsets.only(bottom: 16),
       child: Row(
         children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: Colors.grey.shade700,
-            ),
-            child: ClipOval(
-              child: Image.asset(
-                call.contact.image,
-                fit: BoxFit.cover,
-              ).localAsset(),
+          GestureDetector(
+            onTap: () {
+              // Navigate to profile details page
+              routeTo(ProfileDetailsPage.path, data: {
+                'userName': call.contact.name,
+                'userImage': call.contact.image,
+              });
+            },
+            child: Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.grey.shade700,
+              ),
+              child: ClipOval(
+                child: Image.asset(
+                  call.contact.image,
+                  fit: BoxFit.cover,
+                ).localAsset(),
+              ),
             ),
           ),
           const SizedBox(width: 16),

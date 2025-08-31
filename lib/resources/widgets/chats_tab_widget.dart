@@ -15,6 +15,7 @@ import '../../app/networking/chat_api_service.dart';
 import '../../app/models/user_info.dart';
 import '../../app/models/chat_creation_response.dart';
 import '../pages/chat_screen_page.dart';
+import '../pages/profile_details_page.dart';
 import '../../app/networking/websocket_service.dart';
 import "../../app/utils/chat.dart";
 import "/app/services/chat_service.dart";
@@ -1267,27 +1268,39 @@ class _ChatsTabState extends NyState<ChatsTab> {
                 // Avatar with online indicator
                 Stack(
                   children: [
-                    Container(
-                      width: 54,
-                      height: 54,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.grey.shade700, // Placeholder background
-                      ),
-                      child: imagePath != null
-                          ? ClipOval(
-                              child: Image.network(
-                                imagePath,
-                                width: 54,
-                                height: 54,
-                                fit: BoxFit.cover,
+                    GestureDetector(
+                      onTap: () {
+                        // Navigate to profile details page
+                        routeTo(ProfileDetailsPage.path, data: {
+                          'userId': chat.partner?.id,
+                          'userName': name,
+                          'userImage': imagePath,
+                          'isOnline': isOnline,
+                          'isVerified': isVerified,
+                        });
+                      },
+                      child: Container(
+                        width: 54,
+                        height: 54,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.grey.shade700, // Placeholder background
+                        ),
+                        child: imagePath != null
+                            ? ClipOval(
+                                child: Image.network(
+                                  imagePath,
+                                  width: 54,
+                                  height: 54,
+                                  fit: BoxFit.cover,
+                                ),
+                              )
+                            : Icon(
+                                Icons.person,
+                                color: Colors.grey.shade500,
+                                size: 24,
                               ),
-                            )
-                          : Icon(
-                              Icons.person,
-                              color: Colors.grey.shade500,
-                              size: 24,
-                            ),
+                      ),
                     ),
                     if (isOnline)
                       Positioned(
