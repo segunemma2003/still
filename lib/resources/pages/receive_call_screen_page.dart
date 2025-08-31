@@ -15,10 +15,18 @@ class _ReceiveCallScreenPageState extends NyPage<ReceiveCallScreenPage>
   late AnimationController _fadeController;
   late AnimationController _slideController;
   late AnimationController _dotsController;
+  late AnimationController _rotateController;
+  late AnimationController _bounceController;
+  late AnimationController _glowController;
+  late AnimationController _scaleController;
   late Animation<double> _pulseAnimation;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
   late Animation<double> _dotsAnimation;
+  late Animation<double> _rotateAnimation;
+  late Animation<double> _bounceAnimation;
+  late Animation<double> _glowAnimation;
+  late Animation<double> _scaleAnimation;
 
   @override
   get init => () {
@@ -40,6 +48,26 @@ class _ReceiveCallScreenPageState extends NyPage<ReceiveCallScreenPage>
 
         _dotsController = AnimationController(
           duration: const Duration(milliseconds: 1500),
+          vsync: this,
+        );
+
+        _rotateController = AnimationController(
+          duration: const Duration(seconds: 3),
+          vsync: this,
+        );
+
+        _bounceController = AnimationController(
+          duration: const Duration(milliseconds: 1200),
+          vsync: this,
+        );
+
+        _glowController = AnimationController(
+          duration: const Duration(seconds: 2),
+          vsync: this,
+        );
+
+        _scaleController = AnimationController(
+          duration: const Duration(milliseconds: 800),
           vsync: this,
         );
 
@@ -76,11 +104,47 @@ class _ReceiveCallScreenPageState extends NyPage<ReceiveCallScreenPage>
           curve: Curves.easeInOut,
         ));
 
+        _rotateAnimation = Tween<double>(
+          begin: 0.0,
+          end: 2 * 3.14159,
+        ).animate(CurvedAnimation(
+          parent: _rotateController,
+          curve: Curves.linear,
+        ));
+
+        _bounceAnimation = Tween<double>(
+          begin: 0.0,
+          end: 1.0,
+        ).animate(CurvedAnimation(
+          parent: _bounceController,
+          curve: Curves.elasticOut,
+        ));
+
+        _glowAnimation = Tween<double>(
+          begin: 0.3,
+          end: 1.0,
+        ).animate(CurvedAnimation(
+          parent: _glowController,
+          curve: Curves.easeInOut,
+        ));
+
+        _scaleAnimation = Tween<double>(
+          begin: 0.0,
+          end: 1.0,
+        ).animate(CurvedAnimation(
+          parent: _scaleController,
+          curve: Curves.bounceOut,
+        ));
+
         // Start animations
         _pulseController.repeat(reverse: true);
         _fadeController.forward();
         _slideController.forward();
         _dotsController.repeat();
+        _rotateController.repeat();
+        _bounceController.repeat(reverse: true);
+        _glowController.repeat(reverse: true);
+        _scaleController.forward();
       };
 
   @override
@@ -89,6 +153,10 @@ class _ReceiveCallScreenPageState extends NyPage<ReceiveCallScreenPage>
     _fadeController.dispose();
     _slideController.dispose();
     _dotsController.dispose();
+    _rotateController.dispose();
+    _bounceController.dispose();
+    _glowController.dispose();
+    _scaleController.dispose();
     super.dispose();
   }
 
@@ -171,15 +239,24 @@ class _ReceiveCallScreenPageState extends NyPage<ReceiveCallScreenPage>
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    // Stillur logo
-                                    Container(
-                                      width: 20,
-                                      height: 20,
-                                      margin: const EdgeInsets.only(right: 8),
-                                      child: Image.asset(
-                                        'stillur_without_bg.png',
-                                        fit: BoxFit.contain,
-                                      ).localAsset(),
+                                    // Stillur logo with rotation
+                                    AnimatedBuilder(
+                                      animation: _rotateAnimation,
+                                      builder: (context, child) {
+                                        return Transform.rotate(
+                                          angle: _rotateAnimation.value,
+                                          child: Container(
+                                            width: 20,
+                                            height: 20,
+                                            margin:
+                                                const EdgeInsets.only(right: 8),
+                                            child: Image.asset(
+                                              'stillur_without_bg.png',
+                                              fit: BoxFit.contain,
+                                            ).localAsset(),
+                                          ),
+                                        );
+                                      },
                                     ),
                                     Text(
                                       'Stillur Audio',
@@ -211,23 +288,34 @@ class _ReceiveCallScreenPageState extends NyPage<ReceiveCallScreenPage>
                             offset: Offset(0, 30 * (1 - value)),
                             child: Opacity(
                               opacity: value,
-                              child: Text(
-                                'Demi3d',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: 0.24, // 1% of 24px
-                                  height: 1.0, // 100% line height
-                                  shadows: [
-                                    Shadow(
-                                      color: Colors.black.withOpacity(0.5),
-                                      blurRadius: 10,
-                                      offset: const Offset(0, 2),
+                              child: AnimatedBuilder(
+                                animation: _glowAnimation,
+                                builder: (context, child) {
+                                  return Text(
+                                    'Demi3d',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 0.24, // 1% of 24px
+                                      height: 1.0, // 100% line height
+                                      shadows: [
+                                        Shadow(
+                                          color: Colors.blue.withOpacity(
+                                              _glowAnimation.value * 0.6),
+                                          blurRadius: 15 * _glowAnimation.value,
+                                          offset: const Offset(0, 2),
+                                        ),
+                                        Shadow(
+                                          color: Colors.black.withOpacity(0.5),
+                                          blurRadius: 10,
+                                          offset: const Offset(0, 2),
+                                        ),
+                                      ],
                                     ),
-                                  ],
-                                ),
-                                textAlign: TextAlign.center,
+                                    textAlign: TextAlign.center,
+                                  );
+                                },
                               ),
                             ),
                           );
@@ -380,52 +468,63 @@ class _ReceiveCallScreenPageState extends NyPage<ReceiveCallScreenPage>
       duration: Duration(milliseconds: 600 + delay),
       curve: Curves.elasticOut,
       builder: (context, value, child) {
-        return Transform.scale(
-          scale: value,
-          child: GestureDetector(
-            onTap: onTap,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.grey[700],
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.3),
-                          blurRadius: 15,
-                          spreadRadius: 2,
+        return AnimatedBuilder(
+          animation: _bounceAnimation,
+          builder: (context, child) {
+            return Transform.scale(
+              scale: value * (0.95 + _bounceAnimation.value * 0.1),
+              child: GestureDetector(
+                onTap: onTap,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.grey[700],
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.3),
+                              blurRadius: 15,
+                              spreadRadius: 2,
+                            ),
+                            BoxShadow(
+                              color: Colors.blue
+                                  .withOpacity(_bounceAnimation.value * 0.2),
+                              blurRadius: 10 * _bounceAnimation.value,
+                              spreadRadius: 1,
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                    child: Image.asset(
-                      iconPath,
-                      width: 24,
-                      height: 24,
-                      fit: BoxFit.contain,
-                    ).localAsset(),
+                        child: Image.asset(
+                          iconPath,
+                          width: 24,
+                          height: 24,
+                          fit: BoxFit.contain,
+                        ).localAsset(),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        label,
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.8),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w400,
+                          letterSpacing: 0.14, // 1% of 14px
+                          height: 1.0, // 100% line height
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.8),
-                      fontSize: 14,
-                      fontWeight: FontWeight.w400,
-                      letterSpacing: 0.14, // 1% of 14px
-                      height: 1.0, // 100% line height
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
+                ),
               ),
-            ),
-          ),
+            );
+          },
         );
       },
     );
@@ -442,41 +541,46 @@ class _ReceiveCallScreenPageState extends NyPage<ReceiveCallScreenPage>
       duration: Duration(milliseconds: 800 + delay),
       curve: Curves.elasticOut,
       builder: (context, value, child) {
-        return Transform.scale(
-          scale: value,
-          child: GestureDetector(
-            onTapDown: (_) {
-              // Add tap down animation effect here if needed
-            },
-            onTap: onTap,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
-              width: 64,
-              height: 64,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: color,
-                boxShadow: [
-                  BoxShadow(
-                    color: color.withOpacity(0.4),
-                    blurRadius: 20,
-                    spreadRadius: 3,
+        return AnimatedBuilder(
+          animation: _pulseAnimation,
+          builder: (context, child) {
+            return Transform.scale(
+              scale: value * _pulseAnimation.value,
+              child: GestureDetector(
+                onTapDown: (_) {
+                  // Add tap down animation effect here if needed
+                },
+                onTap: onTap,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: color,
+                    boxShadow: [
+                      BoxShadow(
+                        color: color.withOpacity(0.4 * _pulseAnimation.value),
+                        blurRadius: 20 * _pulseAnimation.value,
+                        spreadRadius: 3 * _pulseAnimation.value,
+                      ),
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.3),
+                        blurRadius: 15,
+                        spreadRadius: 2,
+                      ),
+                    ],
                   ),
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.3),
-                    blurRadius: 15,
-                    spreadRadius: 2,
-                  ),
-                ],
+                  child: Image.asset(
+                    iconPath,
+                    width: 32,
+                    height: 32,
+                    fit: BoxFit.contain,
+                  ).localAsset(),
+                ),
               ),
-              child: Image.asset(
-                iconPath,
-                width: 32,
-                height: 32,
-                fit: BoxFit.contain,
-              ).localAsset(),
-            ),
-          ),
+            );
+          },
         );
       },
     );
