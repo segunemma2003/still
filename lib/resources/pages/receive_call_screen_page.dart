@@ -1,0 +1,484 @@
+import 'package:flutter/material.dart';
+import 'package:nylo_framework/nylo_framework.dart';
+
+class ReceiveCallScreenPage extends NyStatefulWidget {
+  static RouteView path =
+      ("/receive-call-screen", (_) => ReceiveCallScreenPage());
+
+  ReceiveCallScreenPage({super.key})
+      : super(child: () => _ReceiveCallScreenPageState());
+}
+
+class _ReceiveCallScreenPageState extends NyPage<ReceiveCallScreenPage>
+    with TickerProviderStateMixin {
+  late AnimationController _pulseController;
+  late AnimationController _fadeController;
+  late AnimationController _slideController;
+  late AnimationController _dotsController;
+  late Animation<double> _pulseAnimation;
+  late Animation<double> _fadeAnimation;
+  late Animation<Offset> _slideAnimation;
+  late Animation<double> _dotsAnimation;
+
+  @override
+  get init => () {
+        // Initialize animation controllers
+        _pulseController = AnimationController(
+          duration: const Duration(seconds: 2),
+          vsync: this,
+        );
+
+        _fadeController = AnimationController(
+          duration: const Duration(milliseconds: 800),
+          vsync: this,
+        );
+
+        _slideController = AnimationController(
+          duration: const Duration(milliseconds: 600),
+          vsync: this,
+        );
+
+        _dotsController = AnimationController(
+          duration: const Duration(milliseconds: 1500),
+          vsync: this,
+        );
+
+        // Create animations
+        _pulseAnimation = Tween<double>(
+          begin: 0.8,
+          end: 1.2,
+        ).animate(CurvedAnimation(
+          parent: _pulseController,
+          curve: Curves.easeInOut,
+        ));
+
+        _fadeAnimation = Tween<double>(
+          begin: 0.0,
+          end: 1.0,
+        ).animate(CurvedAnimation(
+          parent: _fadeController,
+          curve: Curves.easeOut,
+        ));
+
+        _slideAnimation = Tween<Offset>(
+          begin: const Offset(0, 1),
+          end: Offset.zero,
+        ).animate(CurvedAnimation(
+          parent: _slideController,
+          curve: Curves.elasticOut,
+        ));
+
+        _dotsAnimation = Tween<double>(
+          begin: 0.0,
+          end: 1.0,
+        ).animate(CurvedAnimation(
+          parent: _dotsController,
+          curve: Curves.easeInOut,
+        ));
+
+        // Start animations
+        _pulseController.repeat(reverse: true);
+        _fadeController.forward();
+        _slideController.forward();
+        _dotsController.repeat();
+      };
+
+  @override
+  void dispose() {
+    _pulseController.dispose();
+    _fadeController.dispose();
+    _slideController.dispose();
+    _dotsController.dispose();
+    super.dispose();
+  }
+
+  Widget _buildAnimatedDots() {
+    return AnimatedBuilder(
+      animation: _dotsAnimation,
+      builder: (context, child) {
+        final dots = <Widget>[];
+        for (int i = 0; i < 3; i++) {
+          final delay = i * 0.2;
+          final opacity = (_dotsAnimation.value + delay) % 1.0;
+          dots.add(
+            AnimatedOpacity(
+              duration: const Duration(milliseconds: 300),
+              opacity: opacity > 0.5 ? 1.0 : 0.3,
+              child: Text(
+                '.',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.9),
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          );
+        }
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: dots,
+        );
+      },
+    );
+  }
+
+  @override
+  Widget view(BuildContext context) {
+    return Scaffold(
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFF2A3036),
+              Color(0xFF020B1D),
+            ],
+          ),
+        ),
+        child: SafeArea(
+          child: FadeTransition(
+            opacity: _fadeAnimation,
+            child: Column(
+              children: [
+                // Top section with Stillur and Demi3d - moved to very top
+                Padding(
+                  padding: const EdgeInsets.only(top: 40),
+                  child: Column(
+                    children: [
+                      // Animated app service indicator
+                      TweenAnimationBuilder<double>(
+                        tween: Tween<double>(begin: 0, end: 1),
+                        duration: const Duration(milliseconds: 800),
+                        curve: Curves.easeOut,
+                        builder: (context, value, child) {
+                          return Transform.translate(
+                            offset: Offset(0, 20 * (1 - value)),
+                            child: Opacity(
+                              opacity: value,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 16, vertical: 8),
+                                // decoration: BoxDecoration(
+                                //   color: Colors.white.withOpacity(0.15),
+                                //   borderRadius: BorderRadius.circular(20),
+                                //   border: Border.all(
+                                //     color: Colors.white.withOpacity(0.2),
+                                //     width: 1,
+                                //   ),
+                                // ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    // Stillur logo
+                                    Container(
+                                      width: 20,
+                                      height: 20,
+                                      margin: const EdgeInsets.only(right: 8),
+                                      child: Image.asset(
+                                        'stillur_without_bg.png',
+                                        fit: BoxFit.contain,
+                                      ).localAsset(),
+                                    ),
+                                    Text(
+                                      'Stillur Audio',
+                                      style: TextStyle(
+                                        color: Colors.white.withOpacity(0.9),
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    _buildAnimatedDots(),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+
+                      const SizedBox(height: 32),
+
+                      // Animated caller name with updated styling
+                      TweenAnimationBuilder<double>(
+                        tween: Tween<double>(begin: 0, end: 1),
+                        duration: const Duration(milliseconds: 1000),
+                        curve: Curves.easeOut,
+                        builder: (context, value, child) {
+                          return Transform.translate(
+                            offset: Offset(0, 30 * (1 - value)),
+                            child: Opacity(
+                              opacity: value,
+                              child: Text(
+                                'Demi3d',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.24, // 1% of 24px
+                                  height: 1.0, // 100% line height
+                                  shadows: [
+                                    Shadow(
+                                      color: Colors.black.withOpacity(0.5),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Spacer to push other content down
+                const Spacer(),
+
+                // Middle section - animated action buttons
+                SlideTransition(
+                  position: _slideAnimation,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // Animated Message button
+                      _buildAnimatedActionButton(
+                        iconPath: 'message.png',
+                        label: 'Message',
+                        delay: 200,
+                        onTap: () {
+                          // Handle message action
+                        },
+                      ),
+
+                      // Horizontal spacing of 182px
+                      const SizedBox(width: 182),
+
+                      // Animated Remind Me button
+                      _buildAnimatedActionButton(
+                        iconPath: 'remind.png',
+                        label: 'Remind Me',
+                        delay: 300,
+                        onTap: () {
+                          // Handle remind me action
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Vertical spacing of 24px
+                const SizedBox(height: 24),
+
+                // Bottom section - animated main action buttons with labels
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 40),
+                  child: SlideTransition(
+                    position: _slideAnimation,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        // Decline button with label
+                        Column(
+                          children: [
+                            _buildMainActionButton(
+                              color: Colors.red,
+                              iconPath: 'reject.png',
+                              delay: 400,
+                              onTap: () {
+                                Navigator.of(context).pop();
+                              },
+                            ),
+                            const SizedBox(height: 12),
+                            TweenAnimationBuilder<double>(
+                              tween: Tween<double>(begin: 0, end: 1),
+                              duration: const Duration(milliseconds: 1200),
+                              curve: Curves.easeOut,
+                              builder: (context, value, child) {
+                                return Opacity(
+                                  opacity: value,
+                                  child: Text(
+                                    'Decline',
+                                    style: TextStyle(
+                                      color: Colors.white.withOpacity(0.8),
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w400,
+                                      letterSpacing: 0.14, // 1% of 14px
+                                      height: 1.0, // 100% line height
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+
+                        // Horizontal spacing of 182px
+                        const SizedBox(width: 182),
+
+                        // Accept button with label
+                        Column(
+                          children: [
+                            _buildMainActionButton(
+                              color: Colors.green,
+                              iconPath: 'accept.png',
+                              delay: 500,
+                              onTap: () {
+                                // Handle accept action
+                              },
+                            ),
+                            const SizedBox(height: 12),
+                            TweenAnimationBuilder<double>(
+                              tween: Tween<double>(begin: 0, end: 1),
+                              duration: const Duration(milliseconds: 1200),
+                              curve: Curves.easeOut,
+                              builder: (context, value, child) {
+                                return Opacity(
+                                  opacity: value,
+                                  child: Text(
+                                    'Accept',
+                                    style: TextStyle(
+                                      color: Colors.white.withOpacity(0.8),
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w400,
+                                      letterSpacing: 0.14, // 1% of 14px
+                                      height: 1.0, // 100% line height
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAnimatedActionButton({
+    required String iconPath,
+    required String label,
+    required int delay,
+    required VoidCallback onTap,
+  }) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(begin: 0, end: 1),
+      duration: Duration(milliseconds: 600 + delay),
+      curve: Curves.elasticOut,
+      builder: (context, value, child) {
+        return Transform.scale(
+          scale: value,
+          child: GestureDetector(
+            onTap: onTap,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.grey[700],
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.3),
+                          blurRadius: 15,
+                          spreadRadius: 2,
+                        ),
+                      ],
+                    ),
+                    child: Image.asset(
+                      iconPath,
+                      width: 24,
+                      height: 24,
+                      fit: BoxFit.contain,
+                    ).localAsset(),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.8),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w400,
+                      letterSpacing: 0.14, // 1% of 14px
+                      height: 1.0, // 100% line height
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildMainActionButton({
+    required Color color,
+    required String iconPath,
+    required int delay,
+    required VoidCallback onTap,
+  }) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(begin: 0, end: 1),
+      duration: Duration(milliseconds: 800 + delay),
+      curve: Curves.elasticOut,
+      builder: (context, value, child) {
+        return Transform.scale(
+          scale: value,
+          child: GestureDetector(
+            onTapDown: (_) {
+              // Add tap down animation effect here if needed
+            },
+            onTap: onTap,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: color,
+                boxShadow: [
+                  BoxShadow(
+                    color: color.withOpacity(0.4),
+                    blurRadius: 20,
+                    spreadRadius: 3,
+                  ),
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.3),
+                    blurRadius: 15,
+                    spreadRadius: 2,
+                  ),
+                ],
+              ),
+              child: Image.asset(
+                iconPath,
+                width: 32,
+                height: 32,
+                fit: BoxFit.contain,
+              ).localAsset(),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}

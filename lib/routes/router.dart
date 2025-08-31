@@ -1,3 +1,4 @@
+import '/resources/pages/receive_call_screen_page.dart';
 import 'package:nylo_framework/nylo_framework.dart';
 import '/resources/pages/home_page.dart';
 import '/resources/pages/not_found_page.dart';
@@ -50,11 +51,12 @@ appRouter() => nyRoutes((router) {
       router.add(SignUpMobilePage.path);
       router.add(OtpPhoneVerificationPage.path);
       router.add(OtpEmailVerificationPage.path);
-      router.add(BaseNavigationHub.path).authenticatedRoute();
+      router.add(BaseNavigationHub.path);
       router.add(ChatScreenPage.path);
       router.add(VoiceCallPage.path);
       router.add(VideoCallPage.path);
       router.add(ProfileDetailsPage.path);
       router.add(WelcomeIntroPage.path);
       router.add(WelcomePage.path);
+      router.add(ReceiveCallScreenPage.path).authenticatedRoute();
     });
