@@ -52,11 +52,11 @@ appRouter() => nyRoutes((router) {
       router.add(SignUpMobilePage.path);
       router.add(OtpPhoneVerificationPage.path);
       router.add(OtpEmailVerificationPage.path);
-      router.add(BaseNavigationHub.path);
+      router.add(BaseNavigationHub.path).authenticatedRoute();
       router.add(ChatScreenPage.path);
       router.add(VoiceCallPage.path);
       router.add(VideoCallPage.path);
-      router.add(ProfileDetailsPage.path).authenticatedRoute();
+      router.add(ProfileDetailsPage.path);
       router.add(WelcomeIntroPage.path);
       router.add(WelcomePage.path);
       router.add(ReceiveCallScreenPage.path);
