@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_app/app/networking/websocket_service.dart';
 import 'package:nylo_framework/nylo_framework.dart';
 
 class ReceiveVideoCallScreenPage extends NyStatefulWidget {
@@ -158,6 +159,23 @@ class _ReceiveVideoCallScreenPageState
     _glowController.dispose();
     _scaleController.dispose();
     super.dispose();
+  }
+
+  void handleDeclineCall() {
+    final chatID = data()['chatId'];
+    WebSocketService().sendDeclineCall(chatID);
+    Navigator.pop(context);
+  }
+
+  void handleAcceptCall() async {
+    final navigationData = data();
+
+    // Navigate to video call page with proper data
+    Navigator.pop(context); // Close the incoming call screen first
+    await routeTo(
+      "/video-call",
+      data: navigationData,
+    );
   }
 
   Widget _buildAnimatedDots() {
@@ -393,7 +411,7 @@ class _ReceiveVideoCallScreenPageState
                                   iconPath: 'reject.png',
                                   delay: 400,
                                   onTap: () {
-                                    Navigator.of(context).pop();
+                                    handleDeclineCall();
                                   },
                                 ),
                                 const SizedBox(height: 12),
@@ -432,7 +450,7 @@ class _ReceiveVideoCallScreenPageState
                                   iconPath: 'accept.png',
                                   delay: 500,
                                   onTap: () {
-                                    // Handle accept action
+                                    handleAcceptCall();
                                   },
                                 ),
                                 const SizedBox(height: 12),

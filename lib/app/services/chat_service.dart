@@ -298,7 +298,7 @@ class ChatService {
     try {
       final int callerId = data['callerId'];
       final int chatId = data['chatId'];
-
+      final String type = data['type'];
       print('📞 Incoming call from user $callerId in chat $chatId');
       final userData = await Auth.data();
       final int currentUserId = userData['id'];
@@ -312,21 +312,37 @@ class ChatService {
       final chat = await getChatDetails(chatId);
 
       if (chat != null) {
-        // Navigate to voice call page with joining data
-        await routeTo(
-          "/voice-call",
-          data: {
-            'isGroup': false,
-            'partner': {
-              'username': chat.partner?.username ?? 'Unknown',
-              'avatar': chat.partner?.avatar ?? 'default_avatar.png',
+        if (type == "audio") {
+          await routeTo(
+            "/receive-call-screen",
+            data: {
+              'isGroup': false,
+              'partner': {
+                'username': chat.partner?.username ?? 'Unknown',
+                'avatar': chat.partner?.avatar ?? 'default_avatar.png',
+              },
+              'chatId': chatId,
+              'callerId': callerId,
+              'initiateCall': false, // This indicates joining, not initiating
+              'isJoining': true, // Flag to indicate this is an incoming call
             },
-            'chatId': chatId,
-            'callerId': callerId,
-            'initiateCall': false, // This indicates joining, not initiating
-            'isJoining': true, // Flag to indicate this is an incoming call
-          },
-        );
+          );
+        } else {
+          await routeTo(
+            "/receive-video-call-screen",
+            data: {
+              'isGroup': false,
+              'partner': {
+                'username': chat.partner?.username ?? 'Unknown',
+                'avatar': chat.partner?.avatar ?? 'default_avatar.png',
+              },
+              'chatId': chatId,
+              'callerId': callerId,
+              'initiateCall': false, // This indicates joining, not initiating
+              'isJoining': true, // Flag to indicate this is an incoming call
+            },
+          );
+        }
       }
     } catch (e) {
       print('❌ Error handling join call: $e');

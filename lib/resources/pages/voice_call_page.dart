@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_app/app/networking/chat_api_service.dart';
+import 'package:flutter_app/app/networking/websocket_service.dart';
 import 'package:nylo_framework/nylo_framework.dart';
 import 'dart:async';
 import 'package:livekit_client/livekit_client.dart';
@@ -42,6 +43,7 @@ class _VoiceCallPageState extends NyPage<VoiceCallPage>
   CallType _callType =
       CallType.single; // Change to CallType.group for group calls
 
+  StreamSubscription<Map<String, dynamic>>? _notificationSubscription;
   // Single call data
   String _contactName = "Layla B";
   String _contactImage = "image2.png";
@@ -51,6 +53,7 @@ class _VoiceCallPageState extends NyPage<VoiceCallPage>
   // Group call data
   String _groupName = "Our Loving Pets";
   String _groupImage = "image9.png";
+
   List<CallParticipant> _participants = [
     CallParticipant(name: "You", image: "image6.png", isSelf: true),
     CallParticipant(name: "Layla B", image: "image2.png"),
@@ -118,7 +121,21 @@ class _VoiceCallPageState extends NyPage<VoiceCallPage>
 
         // Then extract call data and potentially start the call
         _extractCallData();
+
+        _notificationSubscription =
+            WebSocketService().notificationStream.listen((notificationData) {
+          _handleIncomingNotification(notificationData);
+        });
       };
+
+  Future<void> _handleIncomingNotification(
+      Map<String, dynamic> notificationData) async {
+    print("Received notification: $notificationData");
+    final action = notificationData['action'];
+    if (action == 'call:declined' && _callType == CallType.single) {
+      await _endCall();
+    }
+  }
 
   void _extractCallData() async {
     final navigationData = data();
@@ -211,7 +228,7 @@ class _VoiceCallPageState extends NyPage<VoiceCallPage>
       _startRingingAnimations();
 
       // Initialize LiveKit room
-      final url = 'ws://127.0.0.1:7880';
+      final url = 'ws://217.77.4.167:7880';
       await _initializeLiveKitRoom(response.callToken, url);
     } catch (e) {
       print("❌ Error starting call: $e");
@@ -242,7 +259,7 @@ class _VoiceCallPageState extends NyPage<VoiceCallPage>
       print("✅ Join call token received: ${response.callToken}");
 
       // Initialize LiveKit room for joining
-      final url = 'ws://127.0.0.1:7880';
+      final url = 'ws://217.77.4.167:7880';
       await _initializeLiveKitRoom(response.callToken, url);
     } catch (e) {
       print("❌ Error joining call: $e");
@@ -674,7 +691,7 @@ class _VoiceCallPageState extends NyPage<VoiceCallPage>
     }).catchError((e) {
       print("⚠️ Error during widget disposal cleanup: $e");
     });
-
+    _notificationSubscription?.cancel();
     _pulseController.dispose();
     _fadeController.dispose();
     super.dispose();

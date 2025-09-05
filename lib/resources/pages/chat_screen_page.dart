@@ -292,58 +292,6 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
     }
   }
 
-  Future<void> _loadPreviousMessages() async {
-    if (_chat != null) {
-      try {
-        print('🔍 Loading previous messages for chat ID: ${_chat!.id}');
-
-        // Load chat with messages using the /chat endpoint
-        final chatData = await apiService.getChatWithMessages(
-          type: 'PRIVATE',
-          partnerId: _chat!.partner?.id.toString(),
-        );
-
-        if (chatData != null && chatData.messages != null) {
-          print('✅ Found ${chatData.messages!.length} previous messages');
-
-          setState(() {
-            // Convert API messages to Message objects
-            _messages =
-                chatData.messages!.map((msg) => Message.fromJson(msg)).toList();
-          });
-
-          print('✅ Loaded ${_messages.length} messages into chat');
-
-          // Scroll to bottom to show latest messages
-          _scrollToBottom();
-        } else {
-          print('⚠️ No previous messages found or invalid response');
-          // Use existing messages if available
-          if (_chat!.messages.isNotEmpty) {
-            setState(() {
-              _messages = _chat!.messages;
-            });
-            print('✅ Using existing messages: ${_messages.length} messages');
-          }
-        }
-      } catch (e) {
-        print('❌ Error loading previous messages: $e');
-        // Fallback to existing messages
-        if (_chat!.messages.isNotEmpty) {
-          setState(() {
-            _messages = _chat!.messages;
-          });
-          print(
-              '✅ Fallback to existing messages: ${_messages.length} messages');
-        }
-      }
-    }
-  }
-
-  String _formatMessageTime(DateTime time) {
-    return "${time.hour}:${time.minute.toString().padLeft(2, '0')}";
-  }
-
   // Handle incoming WebSocket messages
   void _handleIncomingMessage(Map<String, dynamic> messageData) {
     // This runs on the main thread and won't block UI
@@ -672,7 +620,12 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             GestureDetector(
-                              onTap: () => routeTo(VideoCallPage.path),
+                              onTap: () => routeTo(VideoCallPage.path, data: {
+                                "partner": _chat?.partner?.toJson(),
+                                "isGroup": _chat?.type == 'CHANNEL',
+                                "chatId": _chat?.id,
+                                "initiateCall": true,
+                              }),
                               child: Container(
                                 width: 18,
                                 height: 18,

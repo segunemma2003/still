@@ -64,10 +64,32 @@ class ChatApiService extends ApiService {
     );
   }
 
+  Future<CallResponse?> initiateVideoCall(int chatId) async {
+    return await network<CallResponse>(
+      request: (request) => request.post(
+        "/call/video-call",
+        data: {
+          "chatId": chatId,
+        },
+      ),
+    );
+  }
+
   Future<CallResponse?> joinVoiceCall(int chatId) async {
     return await network<CallResponse>(
       request: (request) => request.post(
         "/call/voice-call/join",
+        data: {
+          "chatId": chatId,
+        },
+      ),
+    );
+  }
+
+  Future<CallResponse?> joinVideoCall(int chatId) async {
+    return await network<CallResponse>(
+      request: (request) => request.post(
+        "/call/video-call/join",
         data: {
           "chatId": chatId,
         },

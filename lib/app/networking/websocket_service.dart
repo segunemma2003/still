@@ -254,6 +254,36 @@ class WebSocketService {
     }
   }
 
+  Future<void> sendDeclineCall(int chatID) async {
+    if (!_isConnected || _socket == null) return;
+
+    try {
+      final declineData = {
+        'chatId': chatID,
+      };
+
+      _socket!.emit('decline:call', declineData);
+      print('Call declined: $declineData');
+    } catch (e) {
+      print('Error declining call: $e');
+    }
+  }
+
+  Future<void> sendAcceptCall(int chatID) async {
+    if (!_isConnected || _socket == null) return;
+
+    try {
+      final acceptData = {
+        'chatId': chatID,
+      };
+
+      _socket!.emit('accept:call', acceptData);
+      print('Call accepted: $acceptData');
+    } catch (e) {
+      print('Error accepting call: $e');
+    }
+  }
+
   /// Request chat list updates
   Future<void> requestChatList() async {
     if (!_isConnected || _socket == null) return;

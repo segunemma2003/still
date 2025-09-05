@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_app/app/networking/websocket_service.dart';
 import 'package:nylo_framework/nylo_framework.dart';
 
 class ReceiveCallScreenPage extends NyStatefulWidget {
@@ -158,6 +159,23 @@ class _ReceiveCallScreenPageState extends NyPage<ReceiveCallScreenPage>
     _glowController.dispose();
     _scaleController.dispose();
     super.dispose();
+  }
+
+  Future<void> handleAcceptCall() async {
+    print("Call accepted");
+    final navigationData = data();
+    print("Navigation data: $navigationData");
+    Navigator.pop(context);
+    await routeTo(
+      "/voice-call",
+      data: navigationData,
+    );
+  }
+
+  void handleDeclineCall() {
+    final chatID = data()['chatId'];
+    WebSocketService().sendDeclineCall(chatID);
+    Navigator.pop(context);
   }
 
   Widget _buildAnimatedDots() {
@@ -378,9 +396,7 @@ class _ReceiveCallScreenPageState extends NyPage<ReceiveCallScreenPage>
                               color: Colors.red,
                               iconPath: 'reject.png',
                               delay: 400,
-                              onTap: () {
-                                Navigator.of(context).pop();
-                              },
+                              onTap: handleDeclineCall,
                             ),
                             const SizedBox(height: 12),
                             TweenAnimationBuilder<double>(
@@ -417,9 +433,7 @@ class _ReceiveCallScreenPageState extends NyPage<ReceiveCallScreenPage>
                               color: Colors.green,
                               iconPath: 'accept.png',
                               delay: 500,
-                              onTap: () {
-                                // Handle accept action
-                              },
+                              onTap: handleAcceptCall,
                             ),
                             const SizedBox(height: 12),
                             TweenAnimationBuilder<double>(

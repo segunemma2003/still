@@ -1,7 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_app/app/networking/chat_api_service.dart';
+import 'package:flutter_app/app/networking/websocket_service.dart';
+import 'package:livekit_client/livekit_client.dart';
 import 'package:nylo_framework/nylo_framework.dart';
 import 'dart:async';
+
+enum CallType { single, group }
+
+enum CallState { requesting, ringing, connected }
 
 class VideoCallPage extends NyStatefulWidget {
   static RouteView path = ("/video-call", (_) => VideoCallPage());
@@ -11,14 +18,33 @@ class VideoCallPage extends NyStatefulWidget {
 
 class _VideoCallPageState extends NyPage<VideoCallPage>
     with TickerProviderStateMixin {
+  void routeToAuthenticatedRoute() {
+    Navigator.of(context).pushReplacementNamed('/auth');
+  }
+
   bool _isMuted = false;
-  bool _isCameraOn = true;
   bool _isVideoOn = true;
+
+  // LIVEKIT ROOM
+  Room? _room;
+  List<RemoteParticipant> _remoteParticipants = [];
+  bool _isConnecting = false; // Prevent simultaneous connection attempts
+  EventsListener<RoomEvent>? _listener;
+  // Remove unused _isCameraOn since we're using _isVideoOn for video state
+  List<Map<String, dynamic>> _participantHistory =
+      []; // Track all participants who joined
 
   // Call timer
   Timer? _timer;
   int _seconds = 45; // Start with some time for demo
-
+  CallType _callType = CallType.single;
+  int? _chatId; // Example chat ID
+  String _groupName = "Our Loving Pets";
+  String _groupImage = "image9.png";
+  String _contactName = "Layla B";
+  String _contactImage = "image2.png";
+  bool _isJoining = false;
+  CallState _callState = CallState.requesting;
   // Call participants - modify this list to test different layouts
   List<VideoParticipant> _participants = [
     VideoParticipant(
@@ -41,6 +67,7 @@ class _VideoCallPageState extends NyPage<VideoCallPage>
 
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
+  StreamSubscription<Map<String, dynamic>>? _notificationSubscription;
 
   @override
   get init => () {
@@ -59,12 +86,82 @@ class _VideoCallPageState extends NyPage<VideoCallPage>
 
         _fadeController.forward();
         _startTimer();
+        _extractCallData(); // Extract call data on initialization
+        _notificationSubscription =
+            WebSocketService().notificationStream.listen((notificationData) {
+          _handleIncomingNotification(notificationData);
+        });
       };
+
+  void _extractCallData() async {
+    final navigationData = data();
+    print(navigationData);
+
+    if (navigationData != null) {
+      if (navigationData['isGroup'] == true) {
+        _callType = CallType.group;
+        _groupName = navigationData['groupName'] ?? _groupName;
+        _groupImage = navigationData['groupImage'] ?? _groupImage;
+        // _participants = (navigationData['participants'] as List)
+        //     .map((p) => CallParticipant.fromJson(p))
+        //     .toList();
+      } else {
+        _callType = CallType.single;
+        final partner = navigationData['partner'];
+        _contactName = partner['username'] ?? _contactName;
+        _contactImage = partner['avatar'] ?? _contactImage;
+        _chatId = navigationData['chatId'];
+        _isJoining = navigationData['isJoining'] ??
+            false; // Check if joining incoming call
+        final bool initiateCall = navigationData['initiateCall'] ?? false;
+
+        if (_isJoining) {
+          // For incoming calls, start directly in ringing state
+          print("Is   JOINING");
+          setState(() {
+            _callState = CallState.requesting;
+          });
+          _startRingingAnimations();
+
+          // Delay joining the existing call
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              _joinCall();
+            }
+          });
+        } else if (initiateCall) {
+          // Delay call initiation until widget is fully mounted
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              _startCall();
+            }
+          });
+        }
+      }
+    } else {
+      // Delay navigation until after the build is complete
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          routeToAuthenticatedRoute();
+        }
+      });
+    }
+  }
+
+  Future<void> _handleIncomingNotification(
+      Map<String, dynamic> notificationData) async {
+    print("Received notification: $notificationData");
+    final action = notificationData['action'];
+    if (action == 'call:declined' && _callType == CallType.single) {
+      await _endCall();
+    }
+  }
 
   @override
   void dispose() {
     _timer?.cancel();
     _fadeController.dispose();
+    _notificationSubscription?.cancel();
     super.dispose();
   }
 
@@ -82,15 +179,353 @@ class _VideoCallPageState extends NyPage<VideoCallPage>
     return "${minutes.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}";
   }
 
-  String _getParticipantNames() {
-    List<String> names =
-        _participants.where((p) => !p.isSelf).map((p) => p.name).toList();
+  void _startRingingAnimations() {
+    // Add any ringing animations here
+    // For example, vibration pattern or UI animations
+    HapticFeedback.heavyImpact();
+  }
 
-    if (names.length <= 2) {
-      return names.join(" & ");
-    } else {
-      return "${names.take(2).join(", ")} & ${names.length - 2} others";
+  Future<void> _joinCall() async {
+    try {
+      ChatApiService chatApiService = ChatApiService();
+      final response = await chatApiService.joinVideoCall(_chatId!);
+      if (response == null || response.callToken.isEmpty) {
+        print("❌ Failed to get call token. Please try again.");
+        // _showErrorDialog("Failed to get call token. Please try again.");
+        return;
+      }
+      final url = 'ws://217.77.4.167:7880';
+      await _initializeLiveKitRoom(response.callToken, url);
+
+      setState(() {
+        _callState = CallState.connected;
+      });
+      // Add your call joining logic here
+      // For example, connecting to WebRTC or your video call service
+    } catch (e) {
+      print('Error joining call: $e');
+      Navigator.pop(context);
     }
+  }
+
+  Future<void> _startCall() async {
+    try {
+      ChatApiService chatApiService = ChatApiService();
+      final response = await chatApiService.initiateVideoCall(_chatId!);
+      if (response == null || response.callToken.isEmpty) {
+        print("❌ Failed to get call token. Please try again.");
+        // _showErrorDialog("Failed to get call token. Please try again.");
+        return;
+      }
+
+      setState(() {
+        _callState = CallState.ringing;
+      });
+      _startRingingAnimations();
+
+      final url = 'ws://217.77.4.167:7880';
+      await _initializeLiveKitRoom(response.callToken, url);
+
+      // // Simulate connection delay
+      // await Future.delayed(const Duration(seconds: 2));
+
+      // if (mounted) {
+      //   setState(() {
+      //     _callState = CallState.connected;
+      //   });
+      // }
+    } catch (e) {
+      print('Error starting call: $e');
+      Navigator.pop(context);
+    }
+  }
+
+  Future<void> _initializeLiveKitRoom(String token, String url) async {
+    // Prevent simultaneous connection attempts
+    if (_isConnecting) {
+      print("⚠️ Connection attempt already in progress, skipping...");
+      return;
+    }
+
+    try {
+      _isConnecting = true;
+      print("🔄 Setting up LiveKit room...");
+      print("Current room  ${_room}");
+      print("Current room remote: ${_room?.remoteParticipants}");
+      print("Current room local: ${_room?.localParticipant}");
+      // Ensure complete cleanup of any existing room connection
+      await _ensureRoomCleanup();
+
+      // Create fresh room instance
+      _room = Room();
+
+      // Setup event listeners
+      _setupRoomListeners();
+
+      // Connect to room
+      await _room!.connect(
+        url,
+        token,
+        connectOptions: const ConnectOptions(
+          autoSubscribe: true,
+        ),
+      );
+
+      print("✅ LiveKit room setup completed, waiting for participants...");
+
+      // Enable audio by default
+      await _room!.localParticipant?.setMicrophoneEnabled(true);
+      await _room!.localParticipant?.setCameraEnabled(_isVideoOn);
+    } catch (e) {
+      print("❌ Error setting up LiveKit room: $e");
+      // _showErrorDialog("Failed to setup call room: $e");
+    } finally {
+      _isConnecting = false;
+    }
+  }
+
+  /// ✅ Ensure complete cleanup of any existing room connection
+  Future<void> _ensureRoomCleanup() async {
+    if (_room != null) {
+      print("🧹 Cleaning up existing room connection...");
+
+      try {
+        // Stop listening to events first
+        _listener?.cancelAll();
+        _listener?.dispose();
+
+        _listener = null;
+
+        // Disconnect and dispose room
+        await _room!.disconnect();
+        await _room!.dispose();
+
+        // Clear references
+        _room = null;
+        _remoteParticipants.clear();
+
+        print("✅ Room cleanup completed");
+      } catch (e) {
+        print("⚠️ Error during room cleanup: $e");
+        // Force clear references even if cleanup fails
+        _room = null;
+        _listener = null;
+        _remoteParticipants.clear();
+      }
+    }
+
+    // Reset connection flag
+    _isConnecting = false;
+  }
+
+  /// ✅ Setup LiveKit room event listeners
+  void _setupRoomListeners() {
+    _listener = _room!.createListener();
+
+    _listener!
+      ..on<RoomConnectedEvent>((event) {
+        print('✅ Connected to LiveKit room');
+
+        // Capture room information when connected
+        // _captureRoomInfo();
+
+        // Check if there are already participants in the room (for joiners)
+        if (_room != null && _room!.remoteParticipants.isNotEmpty) {
+          print('👥 Found existing participants, joining active call');
+          if (mounted) {
+            setState(() {
+              _callState = CallState.connected;
+              _remoteParticipants.addAll(_room!.remoteParticipants.values);
+            });
+            _stopAllAnimations();
+            _startTimer();
+          }
+        } else {
+          print('📞 Room connected, waiting for other participants...');
+          // Stay in ringing state until another participant joins
+        }
+      })
+      ..on<RoomDisconnectedEvent>((event) {
+        print('❌ Disconnected from room: ${event.reason}');
+
+        // Capture final room state before cleanup
+        // _captureDisconnectionInfo(event.reason?.toString() ?? 'Unknown');
+
+        if (mounted) {
+          Navigator.pop(context);
+        }
+      })
+      ..on<ParticipantConnectedEvent>((event) {
+        print('👤 Participant connected: ${event.participant.name}');
+
+        // Track participant joining
+        _addParticipantToHistory(event.participant, 'joined');
+
+        // ✅ State 3: Connected - Other party joined the call
+        if (mounted) {
+          setState(() {
+            _callState = CallState.connected;
+            _remoteParticipants.add(event.participant);
+          });
+          // _stopAllAnimations();
+          // Only start timer if not already started
+          if (_timer == null) {
+            _startTimer();
+          }
+        }
+      })
+      ..on<ParticipantDisconnectedEvent>((event) {
+        print('👤 Participant disconnected: ${event.participant.name}');
+
+        // Track participant leaving
+        _addParticipantToHistory(event.participant, 'left');
+
+        if (mounted) {
+          setState(() {
+            _remoteParticipants
+                .removeWhere((p) => p.sid == event.participant.sid);
+          });
+
+          // If no remote participants, end the call
+          if (_remoteParticipants.isEmpty &&
+              _callState == CallState.connected) {
+            _endCall();
+          }
+        }
+      })
+      ..on<TrackMutedEvent>((event) {
+        print('🔇 Track muted: ${event.publication.kind}');
+        if (mounted && event.participant is LocalParticipant) {
+          setState(() {
+            // Update state based on actual LiveKit participant state
+            _isMuted = !_room!.localParticipant!.isMicrophoneEnabled();
+            _isVideoOn = _room!.localParticipant!.isCameraEnabled();
+          });
+        }
+      })
+      ..on<TrackUnmutedEvent>((event) {
+        print('🔊 Track unmuted: ${event.publication.kind}');
+        if (mounted && event.participant is LocalParticipant) {
+          setState(() {
+            // Update state based on actual LiveKit participant state
+            _isMuted = !_room!.localParticipant!.isMicrophoneEnabled();
+            _isVideoOn = _room!.localParticipant!.isCameraEnabled();
+          });
+        }
+      });
+  }
+
+  /// ✅ Stop all animations when connected
+  void _stopAllAnimations() {
+    _fadeController.stop();
+    _fadeController.reset();
+  }
+
+  /// ✅ Add participant to history tracking
+  void _addParticipantToHistory(Participant participant, String action) {
+    final participantInfo = {
+      'name': participant.name.isEmpty ? 'Unknown' : participant.name,
+      'sid': participant.sid,
+      'identity': participant.identity,
+      'action': action, // 'joined' or 'left'
+      'timestamp': DateTime.now().toIso8601String(),
+    };
+
+    _participantHistory.add(participantInfo);
+    print('👤 Participant $action: ${participant.name}');
+  }
+
+  /// ✅ End the call and navigate back
+  Future<void> _endCall() async {
+    try {
+      _stopAllAnimations();
+      _stopAllAnimations();
+
+      // Capture final room state before cleanup
+      if (_room != null) {
+        // _captureDisconnectionInfo('User ended call');
+      }
+
+      // Use our comprehensive cleanup method
+      await _ensureRoomCleanup();
+
+      // Example: Show call summary before leaving
+      // _showCallSummary();
+
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+    } catch (e) {
+      print("Error ending call: $e");
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+    }
+  }
+
+  /// ✅ Build local video track widget
+  Widget _buildLocalVideoTrack(LocalParticipant participant) {
+    final videoTrack = participant.videoTrackPublications.isNotEmpty
+        ? participant.videoTrackPublications.first.track as VideoTrack?
+        : null;
+
+    if (videoTrack != null && !videoTrack.muted) {
+      return VideoTrackRenderer(
+        videoTrack,
+        fit: VideoViewFit.cover,
+      );
+    }
+
+    // Fallback to placeholder if no video track or muted
+    return Container(
+      color: Colors.black54,
+      child: const Center(
+        child: Icon(
+          Icons.videocam_off,
+          color: Colors.white,
+          size: 32,
+        ),
+      ),
+    );
+  }
+
+  /// ✅ Build remote video track widget
+  Widget _buildRemoteVideoTrack(RemoteParticipant participant) {
+    final videoTrack = participant.videoTrackPublications.isNotEmpty
+        ? participant.videoTrackPublications.first.track as VideoTrack?
+        : null;
+
+    if (videoTrack != null && !videoTrack.muted) {
+      return VideoTrackRenderer(
+        videoTrack,
+        fit: VideoViewFit.cover,
+      );
+    }
+
+    // Fallback to placeholder if no video track or muted
+    return Container(
+      color: Colors.black54,
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.videocam_off,
+              color: Colors.white,
+              size: 48,
+            ),
+            SizedBox(height: 8),
+            Text(
+              participant.name.isEmpty ? 'Remote User' : participant.name,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -118,6 +553,22 @@ class _VideoCallPageState extends NyPage<VideoCallPage>
   }
 
   Widget _buildTopHeader() {
+    String statusText = '';
+    switch (_callState) {
+      case CallState.requesting:
+        statusText = 'Requesting...';
+        break;
+      case CallState.ringing:
+        statusText = 'Ringing...';
+        break;
+      case CallState.connected:
+        statusText = _formatDuration();
+        break;
+    }
+
+    String headerTitle =
+        _callType == CallType.group ? _groupName : _contactName;
+
     return Positioned(
       top: 0,
       left: 0,
@@ -155,7 +606,7 @@ class _VideoCallPageState extends NyPage<VideoCallPage>
               child: Column(
                 children: [
                   Text(
-                    _getParticipantNames(),
+                    headerTitle,
                     style: const TextStyle(
                       color: Color(0xFFE8E7EA),
                       fontSize: 16,
@@ -165,7 +616,7 @@ class _VideoCallPageState extends NyPage<VideoCallPage>
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    _formatDuration(),
+                    statusText,
                     style: const TextStyle(
                       color: Color(0xFFE8E7EA),
                       fontSize: 12,
@@ -210,10 +661,23 @@ class _VideoCallPageState extends NyPage<VideoCallPage>
   }
 
   Widget _buildVideoContent() {
-    if (_participants.length == 1) {
-      // Single participant (self only)
+    // Determine total participants (local + remote)
+    final totalParticipants =
+        (_room?.localParticipant != null ? 1 : 0) + _remoteParticipants.length;
+
+    if (totalParticipants == 0) {
+      // No LiveKit connection, fall back to demo participants
+      if (_participants.length == 1) {
+        return _buildSingleVideoView();
+      } else if (_participants.length == 2) {
+        return _buildDualVideoView();
+      } else {
+        return _buildGroupVideoView();
+      }
+    } else if (totalParticipants == 1) {
+      // Only local participant (self only)
       return _buildSingleVideoView();
-    } else if (_participants.length == 2) {
+    } else if (totalParticipants == 2) {
       // Two participants - main video with picture-in-picture
       return _buildDualVideoView();
     } else {
@@ -223,23 +687,26 @@ class _VideoCallPageState extends NyPage<VideoCallPage>
   }
 
   Widget _buildSingleVideoView() {
+    final localParticipant = _room?.localParticipant;
     final mainParticipant = _participants.first;
 
     return Stack(
       children: [
-        // Main video feed
+        // Main video feed - show local camera if available
         Container(
           width: double.infinity,
           height: double.infinity,
           child: ClipRRect(
-            child: Image.asset(
-              mainParticipant.image,
-              fit: BoxFit.cover,
-            ).localAsset(),
+            child: _isVideoOn && localParticipant != null
+                ? _buildLocalVideoTrack(localParticipant)
+                : Image.asset(
+                    mainParticipant.image,
+                    fit: BoxFit.cover,
+                  ).localAsset(),
           ),
         ),
 
-        // Self preview (small window in corner)
+        // Self preview (small window in corner) - only show if main is not self
         if (!mainParticipant.isSelf)
           Positioned(
             top: 80,
@@ -253,10 +720,12 @@ class _VideoCallPageState extends NyPage<VideoCallPage>
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(10),
-                child: Image.asset(
-                  "image6.png", // Self image
-                  fit: BoxFit.cover,
-                ).localAsset(),
+                child: _isVideoOn && localParticipant != null
+                    ? _buildLocalVideoTrack(localParticipant)
+                    : Image.asset(
+                        "image6.png", // Self image
+                        fit: BoxFit.cover,
+                      ).localAsset(),
               ),
             ),
           ),
@@ -265,20 +734,23 @@ class _VideoCallPageState extends NyPage<VideoCallPage>
   }
 
   Widget _buildDualVideoView() {
-    final otherParticipant = _participants.firstWhere((p) => !p.isSelf);
-    final selfParticipant = _participants.firstWhere((p) => p.isSelf);
+    // Use LiveKit participants if available, otherwise fall back to demo participants
+    final hasRemoteParticipant = _remoteParticipants.isNotEmpty;
+    final localParticipant = _room?.localParticipant;
 
     return Stack(
       children: [
-        // Main video feed (other participant)
+        // Main video feed (remote participant or demo)
         Container(
           width: double.infinity,
           height: double.infinity,
           child: ClipRRect(
-            child: Image.asset(
-              otherParticipant.image,
-              fit: BoxFit.cover,
-            ).localAsset(),
+            child: hasRemoteParticipant
+                ? _buildRemoteVideoTrack(_remoteParticipants.first)
+                : Image.asset(
+                    _participants.firstWhere((p) => !p.isSelf).image,
+                    fit: BoxFit.cover,
+                  ).localAsset(),
           ),
         ),
 
@@ -302,10 +774,23 @@ class _VideoCallPageState extends NyPage<VideoCallPage>
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(10),
-              child: Image.asset(
-                selfParticipant.image,
-                fit: BoxFit.cover,
-              ).localAsset(),
+              child: _isVideoOn && localParticipant != null
+                  ? _buildLocalVideoTrack(localParticipant)
+                  : _isVideoOn
+                      ? Image.asset(
+                          _participants.firstWhere((p) => p.isSelf).image,
+                          fit: BoxFit.cover,
+                        ).localAsset()
+                      : Container(
+                          color: Colors.black54,
+                          child: const Center(
+                            child: Icon(
+                              Icons.videocam_off,
+                              color: Colors.white,
+                              size: 32,
+                            ),
+                          ),
+                        ),
             ),
           ),
         ),
@@ -321,7 +806,11 @@ class _VideoCallPageState extends NyPage<VideoCallPage>
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
-              otherParticipant.name,
+              hasRemoteParticipant
+                  ? (_remoteParticipants.first.name.isEmpty
+                      ? 'Remote User'
+                      : _remoteParticipants.first.name)
+                  : _participants.firstWhere((p) => !p.isSelf).name,
               style: const TextStyle(
                 color: Color(0xFFE8E7EA),
                 fontSize: 14,
@@ -356,6 +845,29 @@ class _VideoCallPageState extends NyPage<VideoCallPage>
   }
 
   Widget _buildGroupVideoView() {
+    // Combine LiveKit participants with demo participants for display
+    List<Widget> participantWidgets = [];
+
+    // Add local participant
+    if (_room?.localParticipant != null) {
+      participantWidgets.add(_buildLiveKitParticipantVideo(
+          _room!.localParticipant!,
+          isLocal: true));
+    }
+
+    // Add remote participants
+    for (var remoteParticipant in _remoteParticipants) {
+      participantWidgets.add(
+          _buildLiveKitParticipantVideo(remoteParticipant, isLocal: false));
+    }
+
+    // If no LiveKit participants, fall back to demo participants
+    if (participantWidgets.isEmpty) {
+      for (int i = 0; i < _participants.length; i++) {
+        participantWidgets.add(_buildParticipantVideo(_participants[i]));
+      }
+    }
+
     return GridView.builder(
       padding: const EdgeInsets.fromLTRB(8, 80, 8, 120),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -364,11 +876,114 @@ class _VideoCallPageState extends NyPage<VideoCallPage>
         mainAxisSpacing: 4,
         childAspectRatio: 0.75,
       ),
-      itemCount: _participants.length,
+      itemCount: participantWidgets.length,
       itemBuilder: (context, index) {
-        final participant = _participants[index];
-        return _buildParticipantVideo(participant);
+        return participantWidgets[index];
       },
+    );
+  }
+
+  /// ✅ Build LiveKit participant video widget
+  Widget _buildLiveKitParticipantVideo(Participant participant,
+      {required bool isLocal}) {
+    final videoTrack = participant.videoTrackPublications.isNotEmpty
+        ? participant.videoTrackPublications.first.track as VideoTrack?
+        : null;
+
+    final isMuted = participant.audioTrackPublications.isEmpty ||
+        participant.audioTrackPublications.first.muted;
+
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: isLocal
+            ? Border.all(color: const Color(0xFF3498DB), width: 2)
+            : null,
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: Stack(
+          children: [
+            // Video feed
+            Container(
+              width: double.infinity,
+              height: double.infinity,
+              child: videoTrack != null &&
+                      !videoTrack.muted &&
+                      (isLocal ? _isVideoOn : true)
+                  ? VideoTrackRenderer(
+                      videoTrack,
+                      fit: VideoViewFit.cover,
+                    )
+                  : Container(
+                      color: Colors.black54,
+                      child: Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.videocam_off,
+                              color: Colors.white,
+                              size: 32,
+                            ),
+                            SizedBox(height: 8),
+                            Text(
+                              isLocal
+                                  ? 'You'
+                                  : (participant.name.isEmpty
+                                      ? 'Remote User'
+                                      : participant.name),
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+            ),
+
+            // Participant info overlay
+            Positioned(
+              bottom: 8,
+              left: 8,
+              right: 8,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Color(0xFF1C212C).withOpacity(0.8),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        isLocal
+                            ? 'You'
+                            : (participant.name.isEmpty
+                                ? 'Remote User'
+                                : participant.name),
+                        style: const TextStyle(
+                          color: Color(0xFFE8E7EA),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    if (isMuted)
+                      const Icon(
+                        Icons.mic_off,
+                        color: Colors.red,
+                        size: 14,
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -384,14 +999,25 @@ class _VideoCallPageState extends NyPage<VideoCallPage>
         borderRadius: BorderRadius.circular(10),
         child: Stack(
           children: [
-            // Video feed
+            // Video feed or placeholder
             Container(
               width: double.infinity,
               height: double.infinity,
-              child: Image.asset(
-                participant.image,
-                fit: BoxFit.cover,
-              ).localAsset(),
+              child: participant.isSelf && !_isVideoOn
+                  ? Container(
+                      color: Colors.black54,
+                      child: const Center(
+                        child: Icon(
+                          Icons.videocam_off,
+                          color: Colors.white,
+                          size: 32,
+                        ),
+                      ),
+                    )
+                  : Image.asset(
+                      participant.image,
+                      fit: BoxFit.cover,
+                    ).localAsset(),
             ),
 
             // Participant info overlay
@@ -489,10 +1115,16 @@ class _VideoCallPageState extends NyPage<VideoCallPage>
               icon: _isVideoOn ? Icons.videocam : Icons.videocam_off,
               label: "Video",
               isActive: !_isVideoOn,
-              onTap: () {
+              onTap: () async {
                 setState(() {
                   _isVideoOn = !_isVideoOn;
                 });
+
+                // Control LiveKit camera if connected
+                if (_room?.localParticipant != null) {
+                  await _room!.localParticipant!.setCameraEnabled(_isVideoOn);
+                }
+
                 HapticFeedback.lightImpact();
               },
             ),
@@ -502,10 +1134,17 @@ class _VideoCallPageState extends NyPage<VideoCallPage>
               icon: _isMuted ? Icons.mic_off : Icons.mic,
               label: "Mute",
               isActive: _isMuted,
-              onTap: () {
+              onTap: () async {
                 setState(() {
                   _isMuted = !_isMuted;
                 });
+
+                // Control LiveKit microphone if connected
+                if (_room?.localParticipant != null) {
+                  await _room!.localParticipant!
+                      .setMicrophoneEnabled(!_isMuted);
+                }
+
                 HapticFeedback.lightImpact();
               },
             ),
@@ -518,7 +1157,7 @@ class _VideoCallPageState extends NyPage<VideoCallPage>
               isEndCall: true,
               onTap: () {
                 HapticFeedback.lightImpact();
-                Navigator.pop(context);
+                _endCall();
               },
             ),
           ],
