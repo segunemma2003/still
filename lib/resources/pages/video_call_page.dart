@@ -5,6 +5,7 @@ import 'package:flutter_app/app/networking/websocket_service.dart';
 import 'package:livekit_client/livekit_client.dart';
 import 'package:nylo_framework/nylo_framework.dart';
 import 'dart:async';
+import 'package:permission_handler/permission_handler.dart';
 
 enum CallType { single, group }
 
@@ -114,7 +115,7 @@ class _VideoCallPageState extends NyPage<VideoCallPage>
         _isJoining = navigationData['isJoining'] ??
             false; // Check if joining incoming call
         final bool initiateCall = navigationData['initiateCall'] ?? false;
-
+        await _ensurePermissions(); // Ensure permissions are handled
         if (_isJoining) {
           // For incoming calls, start directly in ringing state
           print("Is   JOINING");
@@ -167,9 +168,17 @@ class _VideoCallPageState extends NyPage<VideoCallPage>
 
   void _startTimer() {
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      setState(() {
+      if(!mounted){
+        timer.cancel();
+        return;
+      }
+
+      if(mounted){
+        setState(() {
         _seconds++;
       });
+      }
+      
     });
   }
 
@@ -185,8 +194,17 @@ class _VideoCallPageState extends NyPage<VideoCallPage>
     HapticFeedback.heavyImpact();
   }
 
+    Future<void> _ensurePermissions() async {
+      final cameraStatus = await Permission.camera.request();
+      final microphoneStatus = await Permission.microphone.request();
+      print("Camera permission: $cameraStatus");
+      print("Microphone permission: $microphoneStatus");
+
+    }
+
   Future<void> _joinCall() async {
     try {
+      await _ensurePermissions(); // <-- Add this line
       ChatApiService chatApiService = ChatApiService();
       final response = await chatApiService.joinVideoCall(_chatId!);
       if (response == null || response.callToken.isEmpty) {
@@ -210,6 +228,8 @@ class _VideoCallPageState extends NyPage<VideoCallPage>
 
   Future<void> _startCall() async {
     try {
+      print("starting call...");
+      await _ensurePermissions(); // <-- Add this line
       ChatApiService chatApiService = ChatApiService();
       final response = await chatApiService.initiateVideoCall(_chatId!);
       if (response == null || response.callToken.isEmpty) {
