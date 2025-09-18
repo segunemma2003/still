@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_app/app/networking/chat_api_service.dart';
 import 'package:nylo_framework/nylo_framework.dart';
+import 'package:image_picker/image_picker.dart';
 
 class SettingsTab extends StatefulWidget {
   const SettingsTab({super.key});
@@ -7,28 +9,53 @@ class SettingsTab extends StatefulWidget {
   @override
   createState() => _SettingsTabState();
 }
+  String get baseUrl => getEnv('API_BASE_URL');
+
+ 
 
 class _SettingsTabState extends NyState<SettingsTab> {
   bool _hiddenProfile = false;
   String _username = "Alim Salim";
   String? _phoneNumber = "+971577563263";
-  String _userAvatar = "image6.png"; // Placeholder for user's avatar image
+  String? _userAvatar; 
+  int _imageKey = 0;
+
   String? _email = "Alim Salim"; // Placeholder for user's full name
+  String defaultAvatar = "image6.png";
 
   @override
   get init => () async {
         final userData = await Auth.data();
         print("User data: $userData");
         if (userData != null) {
+          
           setState(() {
             _username = userData['username'];
             _phoneNumber = userData['phone'];
-            _userAvatar = userData['avatar'] ?? "image6.png"; // Default avatar
+            _userAvatar = userData['avatar']; // Default avatar
             _email = userData['email']; // Default full
             // _hiddenProfile = userData['hiddenProfile'] ?? false;
           });
         }
       };
+
+
+   void _pickMedia() async {
+    final ImagePicker picker = ImagePicker();
+    final XFile? pickedFile = await picker.pickImage(source: ImageSource.gallery);
+    
+    if (pickedFile != null) {
+         final resp = await ChatApiService().uploadAvatarImage(pickedFile.path);
+          
+          if (resp != null && resp.url != null) {
+            _imageKey++;
+            setState(() {
+              _imageKey++;
+            });
+            
+          }
+    } 
+  }
 
   @override
   Widget view(BuildContext context) {
@@ -43,21 +70,71 @@ class _SettingsTabState extends NyState<SettingsTab> {
                 padding: const EdgeInsets.all(24),
                 child: Column(
                   children: [
-                    // Profile Image
-                    Container(
-                      width: 80,
-                      height: 80,
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                      ),
-                      child: ClipOval(
-                        child: Image.asset(
-                          'image6.png', // User's profile image
-                          fit: BoxFit.cover,
-                        ).localAsset(),
+                    // Profile Image with hover and pick media
+                    
+                    GestureDetector(
+                      onTap: _pickMedia,
+
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Container(
+                            width: 80,
+                            height: 80,
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                            ),
+                            child: ClipOval(
+                              child: (_userAvatar != null && _userAvatar != defaultAvatar)
+                                ? Image.network(
+                                    '${baseUrl}$_userAvatar?refresh=$_imageKey',
+                                    key: ValueKey(_imageKey),
+                                  fit: BoxFit.cover,
+                                  width: 80,
+                                  height: 80,
+                                )
+                                : Image.asset(
+                                  defaultAvatar,
+                                  fit: BoxFit.cover,
+                                  width: 80,
+                                  height: 80,
+                                ).localAsset(),
+                            ),
+                            ),
+                          
+                          Positioned(
+                            bottom: 0,
+                            right: 0,
+                            child: GestureDetector(
+                              onTap: _pickMedia,
+
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: Color(0xFF57A1FF),
+                                  shape: BoxShape.circle,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.2),
+                                      blurRadius: 4,
+                                      offset: Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                padding: EdgeInsets.all(2),
+                                child: Icon(
+                                  Icons.edit,
+                                  color: Colors.white,
+                                  size: 14,
+                                ),
+                              ),
+                            ),
+                          )
+
+                        ],
                       ),
                     ),
-
+                   
+                                
                     const SizedBox(height: 16),
 
                     // User Name
@@ -201,6 +278,18 @@ class _SettingsTabState extends NyState<SettingsTab> {
                   },
                   showDivider: false,
                 ),
+                _buildSettingsItem(
+                  // icon: Icons.share_outlined,
+                  imagePath: "share_icon.png",
+                  title: 'Log Out',
+                  textColor: Colors.red,
+                  onTap: () async {
+                    await Auth.logout();
+                    await routeToAuthenticatedRoute();
+                    // Log out user
+                  },
+                  showDivider: false,
+                ),
               ],
             ),
           ),
@@ -217,6 +306,7 @@ class _SettingsTabState extends NyState<SettingsTab> {
     required String title,
     required VoidCallback onTap,
     bool showDivider = false,
+    Color? textColor,
   }) {
     assert(icon != null || imagePath != null,
         'Either icon or imagePath must be provided');
@@ -254,8 +344,8 @@ class _SettingsTabState extends NyState<SettingsTab> {
                   Expanded(
                     child: Text(
                       title,
-                      style: const TextStyle(
-                        color: Color(0xFFE8E7EA),
+                      style: TextStyle(
+                        color: textColor ?? Color(0xFFE8E7EA),
                         fontSize: 16,
                         fontWeight: FontWeight.w500,
                       ),

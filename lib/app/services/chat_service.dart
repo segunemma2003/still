@@ -151,7 +151,7 @@ class ChatService {
               List<Message>.from(messagesResponse!.messages);
         }
 
-        return messagesResponse!.messages;
+        return messagesResponse.messages;
       }
 
       return [];
@@ -193,7 +193,7 @@ class ChatService {
       };
 
       // Send through API
-      await apiService.sendMessage(chatId: int.parse(chatId), message: message);
+      // await apiService.sendMessage(chatId: int.parse(chatId), message: message);
 
       // Also emit through WebSocket for real-time delivery
       _socket?.emit('sendMessage', messageData);

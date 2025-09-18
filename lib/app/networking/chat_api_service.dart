@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_app/app/models/chat_messages_response.dart';
+import 'package:flutter_app/app/models/user.dart';
 import 'package:nylo_framework/nylo_framework.dart';
 import '/app/models/chat.dart';
 import '/app/networking/api_service.dart';
@@ -60,6 +61,18 @@ class ChatApiService extends ApiService {
         data: {
           "chatId": chatId,
         },
+      ),
+    );
+  }
+
+  Future<UploadAvatarResponse?> uploadAvatarImage(String filePath) async {
+    return await network<UploadAvatarResponse>(
+      request: (request) => request.put(
+        "/user/avatar",
+        data: FormData.fromMap({
+          'avatar': MultipartFile.fromFileSync(filePath,
+              filename: filePath.split('/').last),
+        }),
       ),
     );
   }
@@ -139,17 +152,43 @@ class ChatApiService extends ApiService {
   }
 
   /// Send a message to a chat (fallback when WebSocket is not available)
-  Future<Map<String, dynamic>?> sendMessage({
+  Future<void> sendMessage({
     required int chatId,
-    required String message,
+    required String type,
+    String? text,
+    String? caption,
+    String? filePath,
+    int? referenceId,
+    
+
   }) async {
-    return await network<Map<String, dynamic>>(
-      request: (request) => request.post(
-        "/chat/$chatId/messages",
-        data: {
-          "message": message,
-        },
-      ),
+      await network(
+      request: (request) {
+        
+          // Send with file attachment using FormData
+          return request.post(
+            "/message",
+            data: filePath != null
+              ? FormData.fromMap({
+                "chatId": chatId,
+                if (text != null) "text": text,
+                if (caption != null) "caption": caption,
+                if (referenceId != null) "referenceId": referenceId,
+                "type": type,
+                "file": MultipartFile.fromFileSync(
+                  filePath,
+                  filename: filePath.split('/').last,
+                ),
+                })
+              : {
+                "chatId": chatId,
+                if (text != null) "text": text,
+                if (caption != null) "caption": caption,
+                if (referenceId != null) "referenceId": referenceId,
+                "type": type,
+                },
+          );
+      },
     );
   }
 

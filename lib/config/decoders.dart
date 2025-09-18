@@ -33,6 +33,8 @@ final Map<Type, dynamic> modelDecoders = {
   ChatCreationResponse: (data) => ChatCreationResponse.fromJson(data),
   ChatMessagesResponse: (data) => ChatMessagesResponse.fromJson(data),
   CallResponse: (data) => CallResponse.fromJson(data),
+  
+  UploadAvatarResponse: (data) => UploadAvatarResponse.fromJson(data),
   // To handle nullable lists, decode as List<SearchUser> and handle nulls outside the decoder.
   // SearchCharResponse: (data) => SearchCharResponse.fromJson(data),
 };

@@ -8,7 +8,7 @@ class Message {
   final String? text;
   final String? caption;
 
-  final int? fileId;
+  final String? fileId;
   final DateTime createdAt;
   final DateTime updatedAt;
   final Sender sender;
@@ -51,7 +51,7 @@ class Message {
       text: json['text'],
       caption: json['caption'],
       fileId: json['fileId'],
-      referenceId: json['referenceId'],
+      referenceId: json['referenceId'] != null ? int.tryParse(json['referenceId'].toString()) : null,
       createdAt: DateTime.parse(json['createdAt']),
       updatedAt: DateTime.parse(json['updatedAt']),
       sender: Sender.fromJson(json['sender']),

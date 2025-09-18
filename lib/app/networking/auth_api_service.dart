@@ -37,7 +37,7 @@ class AuthApiService extends NyApiService {
           "user": User.fromJson(data),
         };
       },
-      handleFailure: (DioError dioError) {
+      handleFailure: (DioException dioError) {
         print('Registration failed: ${dioError.message}');
 
         // Handle specific error responses
@@ -99,7 +99,7 @@ class AuthApiService extends NyApiService {
         dynamic data = response.data;
         return data['success'] == true || data['verified'] == true;
       },
-      handleFailure: (DioError dioError) {
+      handleFailure: (DioException dioError) {
         print('OTP verification failed: ${dioError.message}');
         return false;
       },
@@ -126,7 +126,7 @@ class AuthApiService extends NyApiService {
         dynamic data = response.data;
         return User.fromJson(data);
       },
-      handleFailure: (DioError dioError) {
+      handleFailure: (DioException dioError) {
         print('Login failed: ${dioError.message}');
         return null;
       },
@@ -140,7 +140,7 @@ class AuthApiService extends NyApiService {
       handleSuccess: (Response response) {
         return true;
       },
-      handleFailure: (DioError dioError) {
+      handleFailure: (DioException dioError) {
         print('Logout failed: ${dioError.message}');
         return false;
       },

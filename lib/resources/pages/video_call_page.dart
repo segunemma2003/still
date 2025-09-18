@@ -6,6 +6,8 @@ import 'package:livekit_client/livekit_client.dart';
 import 'package:nylo_framework/nylo_framework.dart';
 import 'dart:async';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:camera/camera.dart';
+import 'package:audioplayers/audioplayers.dart';
 
 enum CallType { single, group }
 
@@ -25,7 +27,7 @@ class _VideoCallPageState extends NyPage<VideoCallPage>
 
   bool _isMuted = false;
   bool _isVideoOn = true;
-
+  AudioPlayer? _audioPlayer;
   // LIVEKIT ROOM
   Room? _room;
   List<RemoteParticipant> _remoteParticipants = [];
@@ -60,10 +62,7 @@ class _VideoCallPageState extends NyPage<VideoCallPage>
       isSelf: true,
       isMuted: false,
     ),
-    // Add more participants to test group call
-    // VideoParticipant(name: "Layla", image: "image2.png"),
-    // VideoParticipant(name: "Doctor", image: "image10.png"),
-    // VideoParticipant(name: "Ahmad", image: "image11.png"),
+     
   ];
 
   late AnimationController _fadeController;
@@ -94,6 +93,18 @@ class _VideoCallPageState extends NyPage<VideoCallPage>
         });
       };
 
+   Future<void> _playRingtone() async {
+    _audioPlayer?.stop();
+    _audioPlayer = AudioPlayer();
+    await _audioPlayer!.setReleaseMode(ReleaseMode.loop);
+    
+    if(_isJoining){
+      await _audioPlayer!.play(AssetSource('audio/iphone_ringing_tone.mp3'));
+    }else{
+      await _audioPlayer!.play(AssetSource('audio/ringing_initiated.mp3'));
+    }
+  }
+
   void _extractCallData() async {
     final navigationData = data();
     print(navigationData);
@@ -103,9 +114,11 @@ class _VideoCallPageState extends NyPage<VideoCallPage>
         _callType = CallType.group;
         _groupName = navigationData['groupName'] ?? _groupName;
         _groupImage = navigationData['groupImage'] ?? _groupImage;
+        
         // _participants = (navigationData['participants'] as List)
         //     .map((p) => CallParticipant.fromJson(p))
         //     .toList();
+
       } else {
         _callType = CallType.single;
         final partner = navigationData['partner'];
@@ -163,6 +176,8 @@ class _VideoCallPageState extends NyPage<VideoCallPage>
     _timer?.cancel();
     _fadeController.dispose();
     _notificationSubscription?.cancel();
+    _audioPlayer?.dispose();
+
     super.dispose();
   }
 
@@ -192,6 +207,7 @@ class _VideoCallPageState extends NyPage<VideoCallPage>
     // Add any ringing animations here
     // For example, vibration pattern or UI animations
     HapticFeedback.heavyImpact();
+    _playRingtone();
   }
 
     Future<void> _ensurePermissions() async {
@@ -244,6 +260,7 @@ class _VideoCallPageState extends NyPage<VideoCallPage>
       _startRingingAnimations();
 
       final url = 'ws://217.77.4.167:7880';
+      print("Call token: ${response.callToken}");
       await _initializeLiveKitRoom(response.callToken, url);
 
       // // Simulate connection delay
@@ -275,9 +292,15 @@ class _VideoCallPageState extends NyPage<VideoCallPage>
       print("Current room local: ${_room?.localParticipant}");
       // Ensure complete cleanup of any existing room connection
       await _ensureRoomCleanup();
-
+      final cameras = await availableCameras();
+      print("Available cameras: $cameras");
       // Create fresh room instance
-      _room = Room();
+      final roomOptions = RoomOptions(
+        adaptiveStream: true,
+        dynacast: true,
+        // ... your room options
+      );
+      _room = Room(roomOptions: roomOptions);
 
       // Setup event listeners
       _setupRoomListeners();
@@ -289,6 +312,7 @@ class _VideoCallPageState extends NyPage<VideoCallPage>
         connectOptions: const ConnectOptions(
           autoSubscribe: true,
         ),
+        
       );
 
       print("✅ LiveKit room setup completed, waiting for participants...");
@@ -439,6 +463,7 @@ class _VideoCallPageState extends NyPage<VideoCallPage>
   void _stopAllAnimations() {
     _fadeController.stop();
     _fadeController.reset();
+    _audioPlayer?.dispose();
   }
 
   /// ✅ Add participant to history tracking

@@ -1228,7 +1228,7 @@ class _ChatsTabState extends NyState<ChatsTab> {
     bool isLastItem = false, // To control whether to show line demarcation
   }) {
     final name = chat.name;
-    final message = chat.lastMessage?.text ?? '';
+    final message = chat.lastMessage?.text ?? chat.lastMessage?.caption ?? '';
     final time = formatMessageTime(chat.lastMessage?.createdAt) ?? '';
     final isTyping = chat.typingUsers.isNotEmpty;
 
@@ -1272,6 +1272,9 @@ class _ChatsTabState extends NyState<ChatsTab> {
                       onTap: () {
                         // Navigate to profile details page
                         routeTo(ProfileDetailsPage.path, data: {
+                          'partner': chat.partner,
+                          "isGroup": chat.type == 'CHANNEL',
+                          "chatId": chat.id,
                           'userId': chat.partner?.id,
                           'userName': name,
                           'userImage': imagePath,

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_app/resources/pages/video_call_page.dart';
+import 'package:flutter_app/resources/pages/voice_call_page.dart';
 import 'package:nylo_framework/nylo_framework.dart';
 
 class ProfileDetailsPage extends NyStatefulWidget {
@@ -12,6 +14,9 @@ class _ProfileDetailsPageState extends NyPage<ProfileDetailsPage> {
   int _selectedTab = 0; // 0: Media, 1: Files, 2: Links
   final ScrollController _scrollController = ScrollController();
   bool _showCollapsedHeader = false;
+  String _userName = '';
+  String? _userImage;
+  String defaultImage = 'image2.png';
 
   final List<String> _mediaImages = [
     'image40.jpg',
@@ -22,6 +27,7 @@ class _ProfileDetailsPageState extends NyPage<ProfileDetailsPage> {
   @override
   get init => () {
         _scrollController.addListener(_onScroll);
+        _loadUserData();
       };
 
   void _onScroll() {
@@ -31,6 +37,16 @@ class _ProfileDetailsPageState extends NyPage<ProfileDetailsPage> {
         _showCollapsedHeader = showCollapsed;
       });
     }
+  }
+
+  void _loadUserData() {
+    final navigationData = data();
+    print(navigationData['partner'].toJson());
+    print(navigationData);
+    setState(() {
+      _userName = navigationData?['userName'] ?? 'User Name';
+      _userImage = navigationData?['userImage'];
+    });
   }
 
   @override
@@ -108,9 +124,9 @@ class _ProfileDetailsPageState extends NyPage<ProfileDetailsPage> {
             ),
           ),
           const SizedBox(width: 16),
-          const Text(
-            'Layla B',
-            style: TextStyle(
+          Text(
+            _userName,
+            style: const TextStyle(
               color: Color(0xFFE8E7EA),
               fontSize: 18,
               fontFamily: 'PlusJakartaSans',
@@ -162,19 +178,28 @@ class _ProfileDetailsPageState extends NyPage<ProfileDetailsPage> {
               shape: BoxShape.circle,
             ),
             child: ClipOval(
-              child: Image.asset(
-                'image2.png', // Layla B's profile image
-                fit: BoxFit.cover,
-              ).localAsset(),
-            ),
+              child: (_userImage != null && _userImage != defaultImage)
+                  ? Image.network(
+                      '$_userImage',
+                      fit: BoxFit.cover,
+                      width: 80,
+                      height: 80,
+                    )
+                  : Image.asset(
+                    defaultImage,
+                    fit: BoxFit.cover,
+                    width: 80,
+                    height: 80,
+                  ).localAsset(),
+              ),
           ),
 
           const SizedBox(height: 16),
 
           // Name
-          const Text(
-            'Layla B',
-            style: TextStyle(
+          Text(
+            _userName,
+            style: const TextStyle(
               color: Color(0xFFE8E7EA),
               fontSize: 20,
               fontFamily: 'PlusJakartaSans',
@@ -213,8 +238,14 @@ class _ProfileDetailsPageState extends NyPage<ProfileDetailsPage> {
           _buildActionButton(
             icon: Icons.call,
             onTap: () {
+              final navigationData = data();
               // Make voice call
-              Navigator.pushNamed(context, "/voice-call");
+              Navigator.pushNamed(context, VoiceCallPage.path.name, arguments: {
+                'partner': navigationData?['partner'].toJson(),
+                "isGroup": navigationData?['isGroup'] ?? false,
+                "chatId": navigationData?['chatId'],
+                "initiateCall": true,
+              });
             },
           ),
 
@@ -222,9 +253,15 @@ class _ProfileDetailsPageState extends NyPage<ProfileDetailsPage> {
           _buildActionButton(
             icon: Icons.videocam,
             onTap: () {
-              // Make video call
-              Navigator.pushNamed(context, "/video-call");
-            },
+              final navigationData = data();
+              
+            Navigator.pushNamed(context, VideoCallPage.path.name, arguments: {
+              'partner': navigationData?['partner'].toJson(),
+              "isGroup": navigationData?['isGroup'] ?? false,
+              "chatId": navigationData?['chatId'],
+              "initiateCall": true,
+            });
+          },
           ),
 
           // Search Button
@@ -263,9 +300,9 @@ class _ProfileDetailsPageState extends NyPage<ProfileDetailsPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'About Layla B',
-            style: TextStyle(
+          Text(
+            'About $_userName',
+            style: const TextStyle(
               color: Color(0xFFE8E7EA),
               fontSize: 16,
               fontWeight: FontWeight.w400,
@@ -292,7 +329,7 @@ class _ProfileDetailsPageState extends NyPage<ProfileDetailsPage> {
           const SizedBox(height: 16),
 
           // Username
-          _buildInfoItem('Username', 'Layla baby'),
+          _buildInfoItem('Username', _userName),
 
           const SizedBox(height: 12),
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_app/app/networking/websocket_service.dart';
 import 'package:nylo_framework/nylo_framework.dart';
+import 'package:audioplayers/audioplayers.dart';
 
 class ReceiveCallScreenPage extends NyStatefulWidget {
   static RouteView path =
@@ -28,6 +29,7 @@ class _ReceiveCallScreenPageState extends NyPage<ReceiveCallScreenPage>
   late Animation<double> _bounceAnimation;
   late Animation<double> _glowAnimation;
   late Animation<double> _scaleAnimation;
+  AudioPlayer? _audioPlayer;
 
   @override
   get init => () {
@@ -146,6 +148,7 @@ class _ReceiveCallScreenPageState extends NyPage<ReceiveCallScreenPage>
         _bounceController.repeat(reverse: true);
         _glowController.repeat(reverse: true);
         _scaleController.forward();
+        _playRingtone();
       };
 
   @override
@@ -159,6 +162,7 @@ class _ReceiveCallScreenPageState extends NyPage<ReceiveCallScreenPage>
     _glowController.dispose();
     _scaleController.dispose();
     super.dispose();
+    _audioPlayer?.dispose();
   }
 
   Future<void> handleAcceptCall() async {
@@ -177,6 +181,16 @@ class _ReceiveCallScreenPageState extends NyPage<ReceiveCallScreenPage>
     WebSocketService().sendDeclineCall(chatID);
     Navigator.pop(context);
   }
+
+
+   Future<void> _playRingtone() async {
+    _audioPlayer?.stop();
+    _audioPlayer = AudioPlayer();
+    await _audioPlayer!.setReleaseMode(ReleaseMode.loop);
+    await _audioPlayer!.play(AssetSource('audio/iphone_ringing_tone.mp3'));
+    
+  }
+
 
   Widget _buildAnimatedDots() {
     return AnimatedBuilder(

@@ -5,6 +5,7 @@ import 'package:flutter_app/app/networking/websocket_service.dart';
 import 'package:nylo_framework/nylo_framework.dart';
 import 'dart:async';
 import 'package:livekit_client/livekit_client.dart';
+import 'package:audioplayers/audioplayers.dart';
 
 // ✅ Call states for tracking call progress
 enum CallState { requesting, ringing, connected }
@@ -38,7 +39,7 @@ class _VoiceCallPageState extends NyPage<VoiceCallPage>
   bool _isSpeaker = false;
   bool _isVideoOn = false;
   int _callDuration = 0; // ✅ Track call duration in seconds
-
+  AudioPlayer? _audioPlayer;
   // Call data - you can pass this as parameters
   CallType _callType =
       CallType.single; // Change to CallType.group for group calls
@@ -46,7 +47,8 @@ class _VoiceCallPageState extends NyPage<VoiceCallPage>
   StreamSubscription<Map<String, dynamic>>? _notificationSubscription;
   // Single call data
   String _contactName = "Layla B";
-  String _contactImage = "image2.png";
+  String? _contactImage;
+  String defaultImage = "image2.png";
   int? _chatId; // Example chat ID
   int? _callerId; // ID of the caller (for incoming calls)
   bool _isJoining = false; // Flag to indicate if joining an incoming call
@@ -128,6 +130,18 @@ class _VoiceCallPageState extends NyPage<VoiceCallPage>
         });
       };
 
+    Future<void> _playRingtone() async {
+    _audioPlayer?.stop();
+    _audioPlayer = AudioPlayer();
+    await _audioPlayer!.setReleaseMode(ReleaseMode.loop);
+    
+    if(_isJoining){
+      await _audioPlayer!.play(AssetSource('audio/iphone_ringing_tone.mp3'));
+    }else{
+      await _audioPlayer!.play(AssetSource('audio/ringing_initiated.mp3'));
+    }
+  }
+
   Future<void> _handleIncomingNotification(
       Map<String, dynamic> notificationData) async {
     print("Received notification: $notificationData");
@@ -153,7 +167,9 @@ class _VoiceCallPageState extends NyPage<VoiceCallPage>
         _callType = CallType.single;
         final partner = navigationData['partner'];
         _contactName = partner['username'] ?? _contactName;
-        _contactImage = partner['avatar'] ?? _contactImage;
+        _contactImage = partner['avatar'];
+        
+        
         _chatId = navigationData['chatId'];
         _callerId =
             navigationData['callerId']; // Get caller ID for incoming calls
@@ -165,6 +181,7 @@ class _VoiceCallPageState extends NyPage<VoiceCallPage>
           // For incoming calls, start directly in ringing state
           setState(() {
             _callState = CallState.ringing;
+
           });
           _startRingingAnimations();
 
@@ -276,6 +293,7 @@ class _VoiceCallPageState extends NyPage<VoiceCallPage>
   /// ✅ Start animations for ringing state
   void _startRingingAnimations() {
     // Animations continue from requesting state
+    _playRingtone();
     if (!_pulseController.isAnimating) {
       _pulseController.repeat(reverse: true);
       _fadeController.repeat(reverse: true);
@@ -288,6 +306,7 @@ class _VoiceCallPageState extends NyPage<VoiceCallPage>
     _fadeController.stop();
     _pulseController.reset();
     _fadeController.reset();
+    _audioPlayer?.dispose();
   }
 
   Future<void> _initializeLiveKitRoom(String token, String url) async {
@@ -684,7 +703,7 @@ class _VoiceCallPageState extends NyPage<VoiceCallPage>
     // Ensure proper cleanup on widget disposal
     _stopTimer();
     _stopAllAnimations();
-
+    _audioPlayer?.dispose();
     // Clean up room connection asynchronously
     _ensureRoomCleanup().then((_) {
       print("🧹 Widget disposal cleanup completed");
@@ -804,6 +823,7 @@ class _VoiceCallPageState extends NyPage<VoiceCallPage>
   }
 
   Widget _buildSingleCallContent() {
+
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -831,16 +851,24 @@ class _VoiceCallPageState extends NyPage<VoiceCallPage>
                       : [],
                 ),
                 child: ClipOval(
-                  child: Image.asset(
-                    _contactImage,
-                    fit: BoxFit.cover,
-                  ).localAsset(),
+                  child: 
+                  (_contactImage != null)
+                      ?
+                       Image.network(
+                            "${getEnv('API_BASE_URL')}$_contactImage",
+                          fit: BoxFit.cover,
+                          
+                        )
+                      : Image.asset(
+                          defaultImage,
+                          fit: BoxFit.cover,
+                        ).localAsset()
                 ),
-              ),
+                ),
+              
             );
           },
         ),
-
         const SizedBox(height: 32),
 
         // Contact name

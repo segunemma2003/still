@@ -31,6 +31,8 @@ class Partner {
       'username': username,
       'firstName': firstName,
       'lastName': lastName,
+      'avatar': avatar,
+      'status': status,
     };
   }
 }

@@ -15,7 +15,7 @@ environment:
   sdk: '>=3.4.0 <4.0.0'
   flutter: ">=3.24.0 <4.0.0"
 dependencies:
-  socket_io_client: ^2.0.3
+  socket_io_client: ^3.1.2
   url_launcher: ^6.2.6
   google_fonts: ^6.2.1
   analyzer: ^8.1.1
@@ -34,14 +34,17 @@ dependencies:
   country_code_picker: ^3.3.0
   image_picker: ^1.1.2
   photo_manager: ^3.7.1
-  permission_handler: ^11.3.1
+  permission_handler: ^12.0.1
   file_picker: ^10.2.0
   flutter_chat_types: ^3.6.2
   flutter_chat_ui: ^2.5.2
   flutter_svg: ^2.2.0
+  record: ^4.4.4
   flutter_contacts: ^1.1.7+1
-  livekit_client: ^2.5.0+hotfix.1
+  livekit_client: ^2.5.1
   camera: ^0.11.2
+  audioplayers: ^5.2.1
+
 
 dev_dependencies:
   rename: ^3.1.0
@@ -145,4 +148,5 @@ flutter:
     - public/images/
     - public/app_icon/
     - lang/
+    - assets/audio/
     - .env
