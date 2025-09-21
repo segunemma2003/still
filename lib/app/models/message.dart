@@ -7,7 +7,7 @@ class Message {
   final String type;
   final String? text;
   final String? caption;
-
+  final String? tempImagePath;
   final String? fileId;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -37,6 +37,7 @@ class Message {
     this.caption,
     this.fileId,
     this.audioDuration,
+    this.tempImagePath,
     required this.createdAt,
     required this.updatedAt,
     required this.sender,
@@ -63,6 +64,7 @@ class Message {
       isRead: json['isRead'] ?? false,
       isDelivered: json['isDelivered'] ?? false,
       isAudio: json['type'] == "AUDIO",
+      tempImagePath: json['tempImagePath'],
     );
   }
 
@@ -82,6 +84,9 @@ class Message {
       'isDelivered': isDelivered,
       'isAudio': isAudio,
       'audioDuration': audioDuration,
+      'referenceId': referenceId,
+      'statuses': statuses.map((status) => status.toJson()).toList(),
+      'tempImagePath': tempImagePath,
     };
   }
 }

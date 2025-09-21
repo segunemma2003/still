@@ -34,7 +34,6 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   bool _showMediaPicker = false;
-  bool _isPlaying = false;
   bool _hasText = false;
   XFile? _pickedImage;
   bool _isRecording = false;
@@ -398,7 +397,85 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
     _notificationSubscription?.cancel();
     _recordingTimer?.cancel();
     _audioRecorder.dispose();
+    _audioPlayer?.dispose();
     super.dispose();
+  }
+
+  Future<void> _playAudioMessage(Message message) async {
+    try {
+      // Stop any currently playing audio
+      if (_audioPlayer != null) {
+        await _audioPlayer!.stop();
+        await _audioPlayer!.dispose();
+      }
+      
+      _audioPlayer = AudioPlayer();
+      
+      setState(() {
+        _playingMessageId = message.id;
+        _isAudioPlaying = true;
+        _audioPosition = Duration.zero;
+        _audioDuration = Duration.zero;
+      });
+
+      // Listen to duration changes
+      _audioPlayer!.onDurationChanged.listen((duration) {
+        setState(() {
+          _audioDuration = duration;
+        });
+      });
+
+      // Listen to position changes
+      _audioPlayer!.onPositionChanged.listen((position) {
+        setState(() {
+          _audioPosition = position;
+        });
+      });
+
+      // Listen to completion
+      _audioPlayer!.onPlayerComplete.listen((event) {
+        setState(() {
+          _isAudioPlaying = false;
+          _playingMessageId = null;
+          _audioPosition = Duration.zero;
+        });
+      });
+
+      // Play the audio file
+      // Assuming the audio file path is stored in message.text for audio messages
+      
+      if (message.fileId != null) {
+            String audioUrl = '${getEnv("API_BASE_URL")}/uploads/${message.fileId}';
+            print("Playing audio from URL: $audioUrl");
+          await _audioPlayer!.play(UrlSource(audioUrl));
+      }
+    } catch (e) {
+      print('Error playing audio: $e');
+      setState(() {
+        _isAudioPlaying = false;
+        _playingMessageId = null;
+      });
+    }
+  }
+
+  Future<void> _pauseAudioMessage() async {
+    if (_audioPlayer != null) {
+      await _audioPlayer!.pause();
+      setState(() {
+        _isAudioPlaying = false;
+      });
+    }
+  }
+
+  Future<void> _stopAudioMessage() async {
+    if (_audioPlayer != null) {
+      await _audioPlayer!.stop();
+      setState(() {
+        _isAudioPlaying = false;
+        _playingMessageId = null;
+        _audioPosition = Duration.zero;
+      });
+    }
   }
 
   Future<void> _pickFileOnWeb() async {
@@ -451,6 +528,7 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
   }
 
   void _sendMessage() async {
+
     if (_messageController.text.trim().isNotEmpty) {
       final messageText = _messageController.text.trim();
       print("Sending message: $messageText");
@@ -460,16 +538,17 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
 
       // Add message to UI immediately for better UX
       final referenceId = DateTime.now().millisecondsSinceEpoch;
-
+      final type = _pickedImage != null ? "PHOTO" : "TEXT";
+      
       setState(() {
         final now = DateTime.now();
         final newMessage = Message(
           id: DateTime.now().millisecondsSinceEpoch, // Temporary ID
           senderId: _currentUserId ?? 0,
           chatId: _chat?.id ?? 0,
-          type: 'TEXT',
+          type: type,
           text: messageText,
-          caption: null,
+          caption: _pickedImage != null ? messageText : null,
           fileId: null,
           createdAt: now,
           updatedAt: now,
@@ -479,7 +558,7 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
             firstName: null,
             lastName: null,
           ),
-
+          tempImagePath: _pickedImage?.path,
           referenceId: referenceId,
           isSent: false,
           statuses: [],
@@ -488,6 +567,7 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
           isAudio: false,
           audioDuration: null,
         );
+        // _pickedImage = null;
         _messages.add(newMessage);
         print('✅ Message added to list. Total messages: ${_messages.length}');
         print('Message text: "${newMessage.text}"');
@@ -505,7 +585,8 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
         print('✅ SendMessage method called');
       } else if (_chat != null) {
         try {
-          await apiService.sendMessage(
+          
+          apiService.sendMessage(
             chatId: _chat!.id,
             text: messageText,
             caption: messageText,
@@ -517,6 +598,7 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
           setState(() {
             _pickedImage = null; // Clear the picked image after sending
           });
+          
           // if (result != null) {}
         } catch (e) {
           print('Error sending message via API: $e');
@@ -553,7 +635,7 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
           chatId: _chat?.id ?? 0,
           type: 'AUDIO',
           text: null,
-          caption: 'Voice message',
+          // caption: 'Voice message',
           fileId: null,
           createdAt: now,
           updatedAt: now,
@@ -673,6 +755,7 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
       // Send the audio message if recording duration is sufficient
       if (_recordingDuration > 0 && recordingPath != null) {
         // Send audio message through chat API
+        print("Recoding path: $recordingPath");
         await _sendAudioMessage(recordingPath);
       }
       
@@ -1382,119 +1465,156 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
   }
 
   Widget _buildAudioMessage(Message message) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        GestureDetector(
-          onTap: () {
-            setState(() {
-              _isPlaying = !_isPlaying;
-            });
-            HapticFeedback.lightImpact();
-          },
-          child: Container(
-            width: 32,
-            height: 32,
-            decoration: const BoxDecoration(
-              color: Color(0xFFE8E7EA),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              _isPlaying ? Icons.pause : Icons.play_arrow,
-              color: const Color(0xFF3498DB),
-              size: 20,
-            ),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Column(
-            children: [
-              // Audio waveform
-              Container(
-                height: 20,
-                child: Row(
-                  children: List.generate(20, (index) {
-                    double height = [
-                      0.3,
-                      0.7,
-                      0.5,
-                      0.9,
-                      0.4,
-                      0.8,
-                      0.6,
-                      0.3,
-                      0.7,
-                      0.5,
-                      0.9,
-                      0.4,
-                      0.8,
-                      0.6,
-                      0.3,
-                      0.7,
-                      0.5,
-                      0.9,
-                      0.4,
-                      0.8
-                    ][index];
-                    return Container(
-                      width: 2,
-                      height: 20 * height,
-                      margin: const EdgeInsets.symmetric(horizontal: 1),
-                      decoration: BoxDecoration(
-                        color: Color(0xFFE8E7EA).withOpacity(0.8),
-                        borderRadius: BorderRadius.circular(1),
-                      ),
-                    );
-                  }),
-                ),
+    final bool isCurrentlyPlaying = _playingMessageId == message.id && _isAudioPlaying;
+    final bool isSentByMe = _currentUserId != null && message.senderId == _currentUserId;
+    
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+      child: Row(
+        mainAxisAlignment: isSentByMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+        children: [
+          if (!isSentByMe) const SizedBox(width: 10),
+          Flexible(
+            child: Container(
+              constraints: BoxConstraints(
+                maxWidth: MediaQuery.of(context).size.width * 0.7,
               ),
-              const SizedBox(height: 4),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: isSentByMe
+                    ? const Color(0xFF3498DB)
+                    : const Color(0xFF404040),
+                borderRadius: isSentByMe
+                    ? const BorderRadius.only(
+                        topLeft: Radius.circular(18),
+                        topRight: Radius.circular(18),
+                        bottomLeft: Radius.circular(18),
+                        bottomRight: Radius.circular(4),
+                      )
+                    : const BorderRadius.only(
+                        topLeft: Radius.circular(4),
+                        topRight: Radius.circular(18),
+                        bottomLeft: Radius.circular(18),
+                        bottomRight: Radius.circular(18),
+                      ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    message.audioDuration ?? "0:00",
-                    style: TextStyle(
-                      color: Color(0xFFE8E7EA).withOpacity(0.7),
-                      fontSize: 14,
+                  GestureDetector(
+                    onTap: () {
+                      if (isCurrentlyPlaying) {
+                        _pauseAudioMessage();
+                      } else if (_playingMessageId == message.id) {
+                        _playAudioMessage(message);
+                      } else {
+                        _playAudioMessage(message);
+                      }
+                      HapticFeedback.lightImpact();
+                    },
+                    child: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        isCurrentlyPlaying ? Icons.pause : Icons.play_arrow,
+                        color: Colors.white,
+                        size: 24,
+                      ),
                     ),
                   ),
-                  Row(
-                    children: [
-                      Text(
-                        message.createdAt.toIso8601String().substring(11, 16),
-                        style: TextStyle(
-                          color: Color(0xFFE8E7EA).withOpacity(0.7),
-                          fontSize: 14,
-                        ),
-                      ),
-                      if (message.isSent) ...[
-                        const SizedBox(width: 4),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Audio waveform visualization
                         Container(
-                          width: 16,
-                          height: 16,
-                          child: Image.asset(
-                            message.isDelivered
-                                ? 'double_check.png'
-                                : 'single_check.png',
-                            width: 16,
-                            height: 16,
-                            color: message.isDelivered
-                                ? const Color(0xFF00BCD4)
-                                : Color(0xFFE8E7EA).withOpacity(0.7),
-                          ).localAsset(),
+                          height: 30,
+                          child: Row(
+                            children: List.generate(15, (index) {
+                              double height = [
+                                0.3, 0.7, 0.5, 0.9, 0.4, 0.8, 0.6, 0.3,
+                                0.7, 0.5, 0.9, 0.4, 0.8, 0.6, 0.3
+                              ][index];
+                              
+                              // Animate waveform based on progress
+                              double progress = _audioDuration.inMilliseconds > 0 
+                                  ? _audioPosition.inMilliseconds / _audioDuration.inMilliseconds 
+                                  : 0.0;
+                              bool isActive = (index / 15) <= progress;
+                              
+                              return Container(
+                                width: 3,
+                                height: 30 * height,
+                                margin: const EdgeInsets.symmetric(horizontal: 1.5),
+                                decoration: BoxDecoration(
+                                  color: isActive && isCurrentlyPlaying 
+                                      ? Colors.white
+                                      : Colors.white.withOpacity(0.5),
+                                  borderRadius: BorderRadius.circular(1.5),
+                                ),
+                              );
+                            }),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              _playingMessageId == message.id 
+                                  ? _formatDuration(_audioPosition)
+                                  : message.audioDuration ?? "0:00",
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                              ),
+                            ),
+                            Row(
+                              children: [
+                                Text(
+                                  message.createdAt.toIso8601String().substring(11, 16),
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.7),
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                if (isSentByMe) ...[
+                                  const SizedBox(width: 4),
+                                  Icon(
+                                    message.isRead ? Icons.done_all : Icons.done,
+                                    color: message.isRead 
+                                        ? Colors.blue 
+                                        : Colors.white.withOpacity(0.7),
+                                    size: 16,
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ],
                         ),
                       ],
-                    ],
+                    ),
                   ),
                 ],
               ),
-            ],
+            ),
           ),
-        ),
-      ],
+          if (isSentByMe) const SizedBox(width: 10),
+        ],
+      ),
     );
+  }
+
+  String _formatDuration(Duration duration) {
+    String twoDigits(int n) => n.toString().padLeft(2, "0");
+    String twoDigitMinutes = twoDigits(duration.inMinutes.remainder(60));
+    String twoDigitSeconds = twoDigits(duration.inSeconds.remainder(60));
+    return "$twoDigitMinutes:$twoDigitSeconds";
   }
 
   Widget _buildPhotoMessage(Message message) {
@@ -1585,16 +1705,21 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
                                 );
                               },
                             )
-                          : Container(
-                              color: Colors.grey.shade300,
-                              child: const Center(
-                                child: Icon(
-                                  Icons.image,
-                                  color: Colors.grey,
-                                  size: 20,
+                          : message.tempImagePath != null
+                            ? Image.file(
+                                File(message.tempImagePath!),
+                                fit: BoxFit.cover,
+                              )
+                            : Container(
+                                color: Colors.grey.shade300,
+                                child: const Center(
+                                  child: Icon(
+                                    Icons.image,
+                                    color: Colors.grey,
+                                    size: 20,
+                                  ),
                                 ),
                               ),
-                            ),
                       ),
                     ),
                   ),
@@ -2295,54 +2420,503 @@ class _GalleryContentState extends State<_GalleryContent> {
 }
 
 // File Content Widget
-class _FileContent extends StatelessWidget {
+class _FileContent extends StatefulWidget {
+  @override
+  _FileContentState createState() => _FileContentState();
+}
+
+class _FileContentState extends State<_FileContent> {
+  List<FileSystemEntity> _files = [];
+  bool _isLoading = true;
+  String _currentPath = '';
+  List<String> _pathHistory = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFiles();
+  }
+
+  Future<void> _loadFiles() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      if (kIsWeb) {
+        // For web, show file picker instead of directory listing
+        setState(() {
+          _isLoading = false;
+        });
+        return;
+      }
+
+      // Get appropriate directory based on platform
+      Directory directory;
+      if (Platform.isAndroid) {
+        // Try to get external storage directory first
+        try {
+          directory = Directory('/storage/emulated/0/Download');
+          if (!await directory.exists()) {
+            directory = await getExternalStorageDirectory() ?? await getApplicationDocumentsDirectory();
+          }
+        } catch (e) {
+          directory = await getApplicationDocumentsDirectory();
+        }
+      } else if (Platform.isIOS) {
+        directory = await getApplicationDocumentsDirectory();
+      } else {
+        directory = await getApplicationDocumentsDirectory();
+      }
+
+      if (_currentPath.isEmpty) {
+        _currentPath = directory.path;
+      }
+
+      final currentDirectory = Directory(_currentPath);
+      final entities = await currentDirectory.list().toList();
+
+      // Filter and sort files
+      final files = <FileSystemEntity>[];
+      final directories = <FileSystemEntity>[];
+
+      for (final entity in entities) {
+        if (entity is Directory) {
+          // Skip hidden directories
+          if (!entity.path.split('/').last.startsWith('.')) {
+            directories.add(entity);
+          }
+        } else if (entity is File) {
+          // Skip hidden files and system files
+          final fileName = entity.path.split('/').last;
+          if (!fileName.startsWith('.') && !fileName.startsWith('~')) {
+            files.add(entity);
+          }
+        }
+      }
+
+      // Sort directories and files separately
+      directories.sort((a, b) => a.path.split('/').last.toLowerCase().compareTo(b.path.split('/').last.toLowerCase()));
+      files.sort((a, b) => a.path.split('/').last.toLowerCase().compareTo(b.path.split('/').last.toLowerCase()));
+
+      setState(() {
+        _files = [...directories, ...files];
+        _isLoading = false;
+      });
+    } catch (e) {
+      print('Error loading files: $e');
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  void _navigateToDirectory(String path) {
+    _pathHistory.add(_currentPath);
+    _currentPath = path;
+    _loadFiles();
+  }
+
+  void _navigateBack() {
+    if (_pathHistory.isNotEmpty) {
+      _currentPath = _pathHistory.removeLast();
+      _loadFiles();
+    }
+  }
+
+  Future<void> _pickFileFromDevice() async {
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.any,
+        allowMultiple: false,
+      );
+
+      if (result != null && result.files.isNotEmpty) {
+        final file = result.files.first;
+        print('Selected file: ${file.name}, Path: ${file.path}');
+        
+        // Here you can handle the selected file
+        // For example, send it through the chat
+        if (file.path != null) {
+          _showFileSelectedDialog(file.name, file.path!);
+        }
+      }
+    } catch (e) {
+      print('Error picking file: $e');
+    }
+  }
+
+  void _showFileSelectedDialog(String fileName, String filePath) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF2A2A2A),
+          title: const Text(
+            'Send File',
+            style: TextStyle(color: Color(0xFFE8E7EA)),
+          ),
+          content: Text(
+            'Do you want to send "$fileName"?',
+            style: const TextStyle(color: Color(0xFFE8E7EA)),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: const Text(
+                'Cancel',
+                style: TextStyle(color: Colors.grey),
+              ),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _sendFile(filePath, fileName);
+              },
+              child: const Text(
+                'Send',
+                style: TextStyle(color: Color(0xFF3498DB)),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _sendFile(String filePath, String fileName) {
+    // TODO: Implement file sending logic
+    print('Sending file: $fileName from path: $filePath');
+    // You can integrate this with your existing message sending logic
+  }
+
+  String _getFileIcon(String path) {
+    final extension = path.split('.').last.toLowerCase();
+    switch (extension) {
+      case 'pdf':
+        return '📄';
+      case 'doc':
+      case 'docx':
+        return '📝';
+      case 'xls':
+      case 'xlsx':
+        return '📊';
+      case 'ppt':
+      case 'pptx':
+        return '📽️';
+      case 'jpg':
+      case 'jpeg':
+      case 'png':
+      case 'gif':
+        return '🖼️';
+      case 'mp4':
+      case 'avi':
+      case 'mov':
+        return '🎥';
+      case 'mp3':
+      case 'wav':
+      case 'm4a':
+        return '🎵';
+      case 'zip':
+      case 'rar':
+      case '7z':
+        return '🗜️';
+      case 'txt':
+        return '📋';
+      default:
+        return '📁';
+    }
+  }
+
+  String _formatFileSize(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+  }
+
   @override
   Widget build(BuildContext context) {
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: 10,
-      itemBuilder: (context, index) {
-        return Container(
-          margin: const EdgeInsets.only(bottom: 12),
+    if (kIsWeb) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.folder_open,
+              color: Color(0xFF3498DB),
+              size: 64,
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Select File',
+              style: TextStyle(
+                color: Color(0xFFE8E7EA),
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Click below to choose a file from your device',
+              style: TextStyle(
+                color: Color(0xFF6E6E6E),
+                fontSize: 14,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: _pickFileFromDevice,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF3498DB),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: const Text('Choose File'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        // Header with path and back button
+        Container(
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: const Color(0xFF2A2A2A),
-            borderRadius: BorderRadius.circular(12),
+          decoration: const BoxDecoration(
+            color: Color(0xFF2A2A2A),
+            border: Border(
+              bottom: BorderSide(color: Color(0xFF3A3A3A), width: 1),
+            ),
           ),
           child: Row(
             children: [
-              Icon(
-                Icons.insert_drive_file,
-                color: const Color(0xFF3498DB),
-                size: 24,
-              ),
-              const SizedBox(width: 12),
+              if (_pathHistory.isNotEmpty)
+                GestureDetector(
+                  onTap: _navigateBack,
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF3498DB).withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.arrow_back,
+                      color: Color(0xFF3498DB),
+                      size: 20,
+                    ),
+                  ),
+                ),
+              if (_pathHistory.isNotEmpty) const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Document ${index + 1}.pdf',
-                      style: const TextStyle(
-                        color: Color(0xFFE8E7EA),
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
+                    const Text(
+                      'Current Folder',
+                      style: TextStyle(
+                        color: Color(0xFF6E6E6E),
+                        fontSize: 12,
                       ),
                     ),
                     Text(
-                      '${(index + 1) * 100} KB',
-                      style: TextStyle(
-                        color: Colors.grey.shade400,
-                        fontSize: 14,
+                      _currentPath.split('/').last.isEmpty 
+                          ? 'Root' 
+                          : _currentPath.split('/').last,
+                      style: const TextStyle(
+                        color: Color(0xFFE8E7EA),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ],
                 ),
               ),
+              GestureDetector(
+                onTap: _pickFileFromDevice,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF3498DB),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.file_open,
+                        color: Colors.white,
+                        size: 16,
+                      ),
+                      SizedBox(width: 4),
+                      Text(
+                        'Pick File',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ],
           ),
-        );
-      },
+        ),
+
+        // File list
+        Expanded(
+          child: _isLoading
+              ? const Center(
+                  child: CircularProgressIndicator(
+                    color: Color(0xFF3498DB),
+                  ),
+                )
+              : _files.isEmpty
+                  ? const Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.folder_open,
+                            color: Color(0xFF6E6E6E),
+                            size: 64,
+                          ),
+                          SizedBox(height: 16),
+                          Text(
+                            'No Files Found',
+                            style: TextStyle(
+                              color: Color(0xFFE8E7EA),
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          SizedBox(height: 8),
+                          Text(
+                            'This directory appears to be empty',
+                            style: TextStyle(
+                              color: Color(0xFF6E6E6E),
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: _files.length,
+                      itemBuilder: (context, index) {
+                        final entity = _files[index];
+                        final isDirectory = entity is Directory;
+                        final name = entity.path.split('/').last;
+
+                        return GestureDetector(
+                          onTap: () {
+                            if (isDirectory) {
+                              _navigateToDirectory(entity.path);
+                            } else {
+                              _showFileSelectedDialog(name, entity.path);
+                            }
+                          },
+                          child: Container(
+                            margin: const EdgeInsets.only(bottom: 12),
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2A2A2A),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: Colors.transparent,
+                                width: 2,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 40,
+                                  height: 40,
+                                  decoration: BoxDecoration(
+                                    color: isDirectory 
+                                        ? const Color(0xFFF39C12).withOpacity(0.2)
+                                        : const Color(0xFF3498DB).withOpacity(0.2),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Center(
+                                    child: isDirectory
+                                        ? const Icon(
+                                            Icons.folder,
+                                            color: Color(0xFFF39C12),
+                                            size: 24,
+                                          )
+                                        : Text(
+                                            _getFileIcon(entity.path),
+                                            style: const TextStyle(fontSize: 20),
+                                          ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        name,
+                                        style: const TextStyle(
+                                          color: Color(0xFFE8E7EA),
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      if (!isDirectory) ...[
+                                        const SizedBox(height: 4),
+                                        FutureBuilder<FileStat>(
+                                          future: entity.stat(),
+                                          builder: (context, snapshot) {
+                                            if (snapshot.hasData) {
+                                              return Text(
+                                                _formatFileSize(snapshot.data!.size),
+                                                style: TextStyle(
+                                                  color: Colors.grey.shade400,
+                                                  fontSize: 14,
+                                                ),
+                                              );
+                                            }
+                                            return Text(
+                                              'Loading...',
+                                              style: TextStyle(
+                                                color: Colors.grey.shade400,
+                                                fontSize: 14,
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                                if (isDirectory)
+                                  const Icon(
+                                    Icons.arrow_forward_ios,
+                                    color: Color(0xFF6E6E6E),
+                                    size: 16,
+                                  ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+        ),
+      ],
     );
   }
 }

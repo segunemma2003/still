@@ -411,7 +411,7 @@ class _SettingsTabState extends NyState<SettingsTab> {
                     _hiddenProfile = value;
                   });
                 },
-                activeColor: const Color(0xFF3498DB),
+                activeThumbColor: const Color(0xFF3498DB),
                 inactiveThumbColor: Colors.grey.shade400,
                 inactiveTrackColor: Colors.grey.shade700,
               ),
