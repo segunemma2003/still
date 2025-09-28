@@ -50,6 +50,10 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
   bool _isVerified = false;
   Set<int> _typingUsers = {};
 
+  String? currentDay; // Track current day for day separators
+  bool _isShowingFloatingHeader = false; // Control visibility of the floating header
+  Timer? _headerVisibilityTimer; // Timer to hide header after period of inactivity
+
   // WebSocket integration
   StreamSubscription<Map<String, dynamic>>? _wsSubscription;
   StreamSubscription<Map<String, dynamic>>? _notificationSubscription;
@@ -106,14 +110,12 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
         if (navigationData != null) {
           final chatId = navigationData['chatId'] as int?;
 
-          // Load previous messages if we have a chat
+          
           if (chatId != null) {
             _chat = await ChatService().getChatDetails(chatId);
             final messages = await ChatService().getChatMessages(chatId);
 
-            // print("Total messages: ${_chat?.messages.length}");
-            // _chat = await apiService.getChatDetails(chatId: chatId);
-            // print('Chat loaded: ${_chat?.name}');
+            
             if (_chat != null) {
               if (_chat!.type == 'PRIVATE' && _chat!.partner != null) {
                 _userName = _chat!.name;
@@ -198,7 +200,7 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
     }
   }
 
-  // Handle scroll events to detect when user reaches the top
+  // Handle scroll events to detect when user reaches the top and update current day
   void _onScroll() {
     if (_scrollController.hasClients) {
       // Check if user has scrolled to the top (within 100 pixels from the top)
@@ -206,7 +208,50 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
         print("At the top");
         _loadMoreMessagesAtTop();
       }
+      
+      // Show floating header while scrolling
+      _showFloatingHeader();
+      
+      // Update the current day based on visible messages
+      if (_messages.isNotEmpty) {
+        // Estimate which message is at the top of the viewport
+        double itemHeight = 70.0; // Approximate height of a message
+        int visibleIndex = (_scrollController.position.pixels / itemHeight).floor();
+        
+        // Bound the index within the list range
+        visibleIndex = visibleIndex.clamp(0, _messages.length - 1);
+        
+        // Update current day if it changed
+        String newDay = _formatDaySeparator(_messages[visibleIndex].createdAt);
+        if (currentDay != newDay) {
+          setState(() {
+            currentDay = newDay;
+          });
+        }
+      }
     }
+  }
+  
+  // Show floating header and set timer to hide it
+  void _showFloatingHeader() {
+    // Cancel any existing timer
+    _headerVisibilityTimer?.cancel();
+    
+    // Show the header
+    if (!_isShowingFloatingHeader) {
+      setState(() {
+        _isShowingFloatingHeader = true;
+      });
+    }
+    
+    // Set timer to hide header after 3 seconds
+    _headerVisibilityTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) {
+        setState(() {
+          _isShowingFloatingHeader = false;
+        });
+      }
+    });
   }
 
   // Load more messages when user scrolls to top
@@ -396,6 +441,7 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
     _wsSubscription?.cancel();
     _notificationSubscription?.cancel();
     _recordingTimer?.cancel();
+    _headerVisibilityTimer?.cancel(); // Dispose the header visibility timer
     _audioRecorder.dispose();
     _audioPlayer?.dispose();
     super.dispose();
@@ -989,6 +1035,7 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
                             controller: _scrollController,
                             itemCount:
                                 _messages.length + (_isLoadingAtTop ? 1 : 0),
+                                padding: const EdgeInsets.only(bottom: 80),
                             itemBuilder: (context, index) {
                               // Show loading indicator at the top
                               if (index == 0 && _isLoadingAtTop) {
@@ -1011,36 +1058,43 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
                               // Adjust index if loading indicator is shown
                               final messageIndex =
                                   _isLoadingAtTop ? index - 1 : index;
-                              return _buildMessage(_messages[messageIndex]);
+                              return _buildMessageWithDateSeparator(messageIndex);
                             },
                           ),
                         ),
                       ),
                     ),
 
-                    // Floating "Today" header
-                    Positioned(
-                      top: 8,
-                      left: 0,
-                      right: 0,
-                      child: Center(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: Color(0xFF1C212C).withOpacity(0.8),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Text(
-                            'Today',
-                            style: TextStyle(
-                              color: Color(0xFFE8E7EA),
-                              fontSize: 14,
+                    // Floating date header - only visible while scrolling
+                    if (_isShowingFloatingHeader)
+                      Positioned(
+                        top: 8,
+                        left: 0,
+                        right: 0,
+                        child: AnimatedOpacity(
+                          opacity: _isShowingFloatingHeader ? 1.0 : 0.0,
+                          duration: const Duration(milliseconds: 300),
+                          child: Center(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Color(0xFF1C212C).withOpacity(0.8),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                currentDay ?? (_messages.isNotEmpty 
+                                    ? _formatDaySeparator(_messages[0].createdAt)
+                                    : 'Today'),
+                                style: const TextStyle(
+                                  color: Color(0xFFE8E7EA),
+                                  fontSize: 14,
+                                ),
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
 
                     // Transparent input area with blur effect
                     if (!_showMediaPicker)
@@ -1337,6 +1391,62 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
         return _buildTextMessage(message);
     }
   }
+  
+  /// Helper function to format the date for the day separator
+  String _formatDaySeparator(DateTime date) {
+    final now = DateTime.now();
+    final difference = now.difference(date).inDays;
+
+    if (difference == 0) {
+      return 'Today';
+    } else if (difference == 1) {
+      return 'Yesterday';
+    } else if (difference < 7) {
+      return ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][date.weekday - 1];
+    } else {
+      // Month names for better readability
+      final months = [
+        'January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'
+      ];
+      return '${months[date.month - 1]} ${date.day}, ${date.year}';
+    }
+  }
+
+  /// Function to build messages with day separators
+  Widget _buildMessageWithDateSeparator(int index) {
+    final message = _messages[index];
+    final messageDate = message.createdAt;
+
+    // Check if a day separator is needed
+    if (index == 0 || messageDate.day != _messages[index - 1].createdAt.day) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Center(
+            child: Container(
+              margin: const EdgeInsets.symmetric(vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: Color(0xFF1C212C).withOpacity(0.8),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                _formatDaySeparator(messageDate),
+                style: const TextStyle(
+                  color: Color(0xFFE8E7EA),
+                  fontSize: 14,
+                ),
+              ),
+            ),
+          ),
+          _buildMessage(message),
+        ],
+      );
+    }
+
+    return _buildMessage(message);
+  }
 
   Widget _buildTextMessage(Message message) {
     // Determine if this message was sent by the current user
@@ -1363,7 +1473,7 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
                 color: isSentByMe
-                    ? const Color(0xFF3498DB)
+                    ? const Color(0xFF18365B)
                     : const Color(0xFF404040),
                 borderRadius: isSentByMe
                     ? const BorderRadius.only(
@@ -1479,10 +1589,9 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
               constraints: BoxConstraints(
                 maxWidth: MediaQuery.of(context).size.width * 0.7,
               ),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
                 color: isSentByMe
-                    ? const Color(0xFF3498DB)
+                    ? const Color(0xFF18365B)
                     : const Color(0xFF404040),
                 borderRadius: isSentByMe
                     ? const BorderRadius.only(
@@ -1638,7 +1747,7 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
               ),
               decoration: BoxDecoration(
                 color: isSentByMe
-                    ? const Color(0xFF3498DB)
+                    ? const Color(0xFF18365B)
                     : const Color(0xFF404040),
                 borderRadius: isSentByMe
                     ? const BorderRadius.only(

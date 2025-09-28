@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_app/app/networking/chat_api_service.dart';
 import 'package:nylo_framework/nylo_framework.dart';
 import 'package:image_picker/image_picker.dart';
@@ -19,9 +21,88 @@ class _SettingsTabState extends NyState<SettingsTab> {
   String? _phoneNumber = "+971577563263";
   String? _userAvatar; 
   int _imageKey = 0;
+  
+  // Track image upload status
+  bool _isUploadingImage = false;
+  String? _tempPickedImagePath;
 
   String? _email = "Alim Salim"; // Placeholder for user's full name
   String defaultAvatar = "image6.png";
+  
+  /// Shows a full-screen image preview when the profile image is tapped
+  void _showFullScreenImage(BuildContext context, {required String imageUrl, required bool isAsset}) {
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        opaque: false,
+        pageBuilder: (context, animation, secondaryAnimation) {
+          return Scaffold(
+            backgroundColor: Colors.black.withOpacity(0.9),
+            body: SafeArea(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  // Image with interactive viewer for zooming
+                  Center(
+                    child: GestureDetector(
+                      onTap: () => Navigator.of(context).pop(),
+                      child: InteractiveViewer(
+                        minScale: 0.5,
+                        maxScale: 4.0,
+                        child: Hero(
+                          tag: 'profile-image',
+                          child: isAsset 
+                            ? Image.asset(
+                                imageUrl,
+                                fit: BoxFit.contain,
+                              ).localAsset()
+                            : Image.network(
+                                imageUrl,
+                                fit: BoxFit.contain,
+                                loadingBuilder: (context, child, loadingProgress) {
+                                  if (loadingProgress == null) return child;
+                                  return Center(
+                                    child: CircularProgressIndicator(
+                                      value: loadingProgress.expectedTotalBytes != null
+                                          ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
+                                          : null,
+                                      color: Colors.white,
+                                    ),
+                                  );
+                                },
+                              ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  // Close button
+                  Positioned(
+                    top: 16,
+                    right: 16,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.5),
+                        shape: BoxShape.circle,
+                      ),
+                      child: IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return FadeTransition(
+            opacity: animation,
+            child: child,
+          );
+        },
+      ),
+    );
+  }
 
   @override
   get init => () async {
@@ -45,16 +126,51 @@ class _SettingsTabState extends NyState<SettingsTab> {
     final XFile? pickedFile = await picker.pickImage(source: ImageSource.gallery);
     
     if (pickedFile != null) {
-         final resp = await ChatApiService().uploadAvatarImage(pickedFile.path);
-          
-          if (resp != null && resp.url != null) {
+      // Set the temporary image path and show loading state
+      setState(() {
+        _tempPickedImagePath = pickedFile.path;
+        _isUploadingImage = true;
+      });
+      
+      try {
+        // Upload the image
+        final resp = await ChatApiService().uploadAvatarImage(pickedFile.path);
+        
+        if (resp != null && resp.url != null) {
+          // Update with the server image
+          _imageKey++;
+          setState(() {
             _imageKey++;
-            setState(() {
-              _imageKey++;
-            });
-            
-          }
-    } 
+            _isUploadingImage = false;
+            _tempPickedImagePath = null;
+          });
+        } else {
+          // Handle upload failure
+          setState(() {
+            _isUploadingImage = false;
+            _tempPickedImagePath = null;
+          });
+          
+          // Show an error message
+          showToast(
+            title: "Error",
+            description: "Failed to upload image. Please try again."
+          );
+        }
+      } catch (e) {
+        // Handle exceptions
+        setState(() {
+          _isUploadingImage = false;
+          _tempPickedImagePath = null;
+        });
+        
+        // Show an error message
+        showToast(
+          title: "Error",
+          description: "Failed to upload image: ${e.toString()}"
+        );
+      }
+    }
   }
 
   @override
@@ -73,8 +189,89 @@ class _SettingsTabState extends NyState<SettingsTab> {
                     // Profile Image with hover and pick media
                     
                     GestureDetector(
-                      onTap: _pickMedia,
-
+                      onTap: () {
+                        HapticFeedback.lightImpact(); // Add haptic feedback
+                        
+                        if (_tempPickedImagePath != null) {
+                          // Show the temporary image in full screen
+                          Navigator.of(context).push(
+                            PageRouteBuilder(
+                              opaque: false,
+                              pageBuilder: (context, animation, secondaryAnimation) {
+                                return Scaffold(
+                                  backgroundColor: Colors.black.withOpacity(0.9),
+                                  body: SafeArea(
+                                    child: Stack(
+                                      fit: StackFit.expand,
+                                      children: [
+                                        Center(
+                                          child: GestureDetector(
+                                            onTap: () => Navigator.of(context).pop(),
+                                            child: InteractiveViewer(
+                                              minScale: 0.5,
+                                              maxScale: 4.0,
+                                              child: Hero(
+                                                tag: 'profile-image',
+                                                child: Image.file(
+                                                  File(_tempPickedImagePath!),
+                                                  fit: BoxFit.contain,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        Positioned(
+                                          top: 16,
+                                          right: 16,
+                                          child: Container(
+                                            decoration: BoxDecoration(
+                                              color: Colors.black.withOpacity(0.5),
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: IconButton(
+                                              icon: const Icon(Icons.close, color: Colors.white),
+                                              onPressed: () => Navigator.of(context).pop(),
+                                            ),
+                                          ),
+                                        ),
+                                        if (_isUploadingImage)
+                                          Center(
+                                            child: Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                CircularProgressIndicator(color: Colors.white),
+                                                SizedBox(height: 16),
+                                                Text(
+                                                  'Uploading...',
+                                                  style: TextStyle(color: Colors.white, fontSize: 16),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                              transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                                return FadeTransition(opacity: animation, child: child);
+                              },
+                            ),
+                          );
+                        } else if (_userAvatar != null && _userAvatar != defaultAvatar) {
+                          _showFullScreenImage(
+                            context,
+                            imageUrl: '${baseUrl}$_userAvatar?refresh=$_imageKey',
+                            isAsset: false,
+                          );
+                        } else {
+                          _showFullScreenImage(
+                            context,
+                            imageUrl: defaultAvatar,
+                            isAsset: true,
+                          );
+                        }
+                      },
                       child: Stack(
                         alignment: Alignment.center,
                         children: [
@@ -85,20 +282,57 @@ class _SettingsTabState extends NyState<SettingsTab> {
                               shape: BoxShape.circle,
                             ),
                             child: ClipOval(
-                              child: (_userAvatar != null && _userAvatar != defaultAvatar)
-                                ? Image.network(
-                                    '${baseUrl}$_userAvatar?refresh=$_imageKey',
-                                    key: ValueKey(_imageKey),
-                                  fit: BoxFit.cover,
-                                  width: 80,
-                                  height: 80,
-                                )
-                                : Image.asset(
-                                  defaultAvatar,
-                                  fit: BoxFit.cover,
-                                  width: 80,
-                                  height: 80,
-                                ).localAsset(),
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  // Show either temporary image, network image, or default image
+                                  if (_tempPickedImagePath != null)
+                                    Hero(
+                                      tag: 'profile-image',
+                                      child: Image.file(
+                                        File(_tempPickedImagePath!),
+                                        fit: BoxFit.cover,
+                                        width: 80,
+                                        height: 80,
+                                      ),
+                                    )
+                                  else if (_userAvatar != null && _userAvatar != defaultAvatar)
+                                    Hero(
+                                      tag: 'profile-image',
+                                      child: Image.network(
+                                        '${baseUrl}$_userAvatar?refresh=$_imageKey',
+                                        key: ValueKey(_imageKey),
+                                        fit: BoxFit.cover,
+                                        width: 80,
+                                        height: 80,
+                                      ),
+                                    )
+                                  else
+                                    Hero(
+                                      tag: 'profile-image',
+                                      child: Image.asset(
+                                        defaultAvatar,
+                                        fit: BoxFit.cover,
+                                        width: 80,
+                                        height: 80,
+                                      ).localAsset(),
+                                    ),
+                                  
+                                  // Show loading indicator when uploading
+                                  if (_isUploadingImage)
+                                    Container(
+                                      width: 80,
+                                      height: 80,
+                                      color: Colors.black.withOpacity(0.5),
+                                      child: Center(
+                                        child: CircularProgressIndicator(
+                                          color: Colors.white,
+                                          strokeWidth: 3,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
                             ),
                             ),
                           
