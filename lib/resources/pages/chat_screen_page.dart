@@ -456,7 +456,7 @@ class _ChatScreenPageState extends NyPage<ChatScreenPage>
       }
       
       _audioPlayer = AudioPlayer();
-      
+
       setState(() {
         _playingMessageId = message.id;
         _isAudioPlaying = true;

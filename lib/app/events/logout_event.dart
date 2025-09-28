@@ -23,7 +23,7 @@ class DefaultListener extends NyListener {
     // Clear local authentication
     await Auth.logout();
 
-    // Navigate to initial route
+    // Use Nylo's router to navigate to initial route and clear history
     routeToInitial();
   }
 }

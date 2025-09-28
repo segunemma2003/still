@@ -30,6 +30,46 @@ class _SettingsTabState extends NyState<SettingsTab> {
   String defaultAvatar = "image6.png";
   
   /// Shows a full-screen image preview when the profile image is tapped
+  // Handle the logout process safely
+  void _performLogout(BuildContext context) async {
+    // Show loading indicator
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return WillPopScope(
+          onWillPop: () async => false, // Prevent back button dismissal
+          child: const Dialog(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            child: Center(
+              child: CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF57A1FF)),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    try {
+      // Clear local auth data first - this is most important
+      await Auth.logout();
+
+      // Use routeTo to navigate to sign-in
+      // This is safer than directly using Navigator
+      routeTo('/sign-in', navigationType: NavigationType.pushAndForgetAll);
+    } catch (e) {
+      print('Error during logout: $e');
+      
+      // Make sure auth is cleared even if there's an error
+      await Auth.logout();
+      
+      // Try the most direct way to get back to sign-in
+      routeTo('/sign-in', navigationType: NavigationType.pushAndForgetAll);
+    }
+  }
+
   void _showFullScreenImage(BuildContext context, {required String imageUrl, required bool isAsset}) {
     Navigator.of(context).push(
       PageRouteBuilder(
@@ -513,14 +553,61 @@ class _SettingsTabState extends NyState<SettingsTab> {
                   showDivider: false,
                 ),
                 _buildSettingsItem(
-                  // icon: Icons.share_outlined,
-                  imagePath: "share_icon.png",
+                  imagePath: "share_icon.png", 
                   title: 'Log Out',
                   textColor: Colors.red,
-                  onTap: () async {
-                    await Auth.logout();
-                    await routeToAuthenticatedRoute();
-                    // Log out user
+                  onTap: () {
+                    // Show confirmation dialog
+                    showDialog(
+                      context: context,
+                      builder: (BuildContext context) {
+                        return AlertDialog(
+                          backgroundColor: const Color(0xFF1C212C),
+                          title: const Text(
+                            'Log Out',
+                            style: TextStyle(
+                              color: Color(0xFFE8E7EA),
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          content: const Text(
+                            'Are you sure you want to log out?',
+                            style: TextStyle(
+                              color: Color(0xFFE8E7EA),
+                            ),
+                          ),
+                          actions: <Widget>[
+                            TextButton(
+                              onPressed: () {
+                                Navigator.of(context).pop(); // Close dialog
+                              },
+                              child: const Text(
+                                'Cancel',
+                                style: TextStyle(
+                                  color: Color(0xFF8E9297),
+                                ),
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () {
+                                // Close the dialog first
+                                Navigator.of(context).pop();
+                                
+                                // Use a simpler logout approach
+                                _performLogout(context);
+                              },
+                              child: const Text(
+                                'Log Out',
+                                style: TextStyle(
+                                  color: Colors.red,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    );
                   },
                   showDivider: false,
                 ),

@@ -135,15 +135,16 @@ class AuthApiService extends NyApiService {
 
   /// Logout user (requires authentication)
   Future<bool?> logoutUser() async {
-    return await network<bool>(
-      request: (request) => request.post("/auth/logout"),
-      handleSuccess: (Response response) {
-        return true;
-      },
-      handleFailure: (DioException dioError) {
-        print('Logout failed: ${dioError.message}');
-        return false;
-      },
-    );
+    return true;
+    // return await network<bool>(
+    //   request: (request) => request.post("/auth/logout"),
+    //   handleSuccess: (Response response) {
+    //     return true;
+    //   },
+    //   handleFailure: (DioException dioError) {
+    //     print('Logout failed: ${dioError.message}');
+    //     return false;
+    //   },
+    // );
   }
 }

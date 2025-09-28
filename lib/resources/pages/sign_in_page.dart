@@ -512,7 +512,7 @@ class _SignInPageState extends NyPage<SignInPage>
         // Login successful, authenticate user and navigate to home
         await Auth.authenticate(data: user.toJson());
 
-        _showSnackBar('Login successful!', isError: false);
+        // _showSnackBar('Login successful!', isError: false);
 
         // Navigate to authenticated route
         Future.delayed(const Duration(seconds: 1), () {
